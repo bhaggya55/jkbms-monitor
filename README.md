@@ -4,6 +4,8 @@ A single-page, offline-capable web app that connects to a JK-BMS battery
 management system over Web Bluetooth and displays live cell voltages,
 pack power, state of charge, and cell-voltage delta.
 
+![JK-BMS Web Bluetooth Monitor screenshot](screenshot.png)
+
 ## Usage
 
 Open [jkbms-monitor.html](jkbms-monitor.html) in a Chromium-based browser
