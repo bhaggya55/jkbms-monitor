@@ -259,38 +259,100 @@ function renderDeviceInfo(d) {
 
 // SETTINGS frame (type 0x01) layout, offsets from the start of the frame
 // (see docs/protocol-design-ble.md in syssi/esphome-jk-bms). These offsets
-// are not affected by the JK02_24S/32S cell-count shift used for LIVE_DATA.
+// are not affected by the JK02_24S/32S cell-count shift used for LIVE_DATA,
+// but fields past the wire-resistance block (offset 142+) are only valid on
+// JK02_32S — JK02_24S leaves that region unused/reserved.
+let lastUse32S = null;
+
 function decodeSettings(frame) {
   const view = new DataView(frame.buffer);
   const u32 = (i) => view.getUint32(i, true);
-  return {
+  const s32 = (i) => view.getInt32(i, true);
+  const s8 = (i) => (frame[i] << 24) >> 24; // sign-extend a byte to int8
+
+  const settings = {
+    smartSleepVoltage: u32(6) / 1000,
     cellUVP: u32(10) / 1000,
     cellUVPR: u32(14) / 1000,
     cellOVP: u32(18) / 1000,
     cellOVPR: u32(22) / 1000,
     balanceTriggerVoltage: u32(26) / 1000,
+    soc100Voltage: u32(30) / 1000,
+    soc0Voltage: u32(34) / 1000,
+    cellRequestChargeVoltage: u32(38) / 1000,
+    cellRequestFloatVoltage: u32(42) / 1000,
+    powerOffVoltage: u32(46) / 1000,
+    maxChargeCurrent: u32(50) / 1000,
+    chargeOcpDelay: u32(54),
+    chargeOcpRecoveryTime: u32(58),
+    maxDischargeCurrent: u32(62) / 1000,
+    dischargeOcpDelay: u32(66),
+    shortCircuitProtectionRecoveryTime: u32(74),
     maxBalanceCurrent: u32(78) / 1000,
     chargeOTP: u32(82) / 10,
     chargeOTPRecovery: u32(86) / 10,
     dischargeOTP: u32(90) / 10,
     dischargeOTPRecovery: u32(94) / 10,
+    chargeUTP: s32(98) / 10,
+    chargeUTPRecovery: s32(102) / 10,
+    mosOTP: s32(106) / 10,
+    mosOTPRecovery: s32(110) / 10,
     cellCount: frame[114],
     chargingEnabled: !!frame[118],
     dischargingEnabled: !!frame[122],
     balancerEnabled: !!frame[126],
     nominalCapacity: u32(130) / 1000,
+    shortCircuitProtectionDelay: u32(134),
     startBalanceVoltage: u32(138) / 1000,
   };
+
+  if (lastUse32S) {
+    Object.assign(settings, {
+      deviceAddress: frame[270],
+      prechargeTime: frame[274],
+      heatingEnabled: !!(frame[282] & 1),
+      disableTemperatureSensors: !!(frame[282] & 2),
+      gpsHeartbeat: !!(frame[282] & 4),
+      portMode: (frame[282] & 8) ? 'RS485' : 'CAN',
+      displayAlwaysOn: !!(frame[282] & 16),
+      specialCharger: !!(frame[282] & 32),
+      smartSleepEnabled: !!(frame[282] & 64),
+      disablePclModule: !!(frame[282] & 128),
+      heatingStartTemperature: s8(284),
+      heatingStopTemperature: s8(285),
+      smartSleepDelay: frame[286],
+      dischargeUTP: s8(296),
+      dischargeUTPRecovery: s8(297),
+    });
+  }
+
+  return settings;
 }
 
 function renderSettings(s) {
   document.getElementById('settingsCard').style.display = '';
-  document.getElementById('settingsOutput').textContent =
+  let text =
     `Cell count: ${s.cellCount}  Nominal capacity: ${s.nominalCapacity.toFixed(1)} Ah\n` +
     `Cell UVP: ${s.cellUVP.toFixed(3)} V (recovery ${s.cellUVPR.toFixed(3)} V)  Cell OVP: ${s.cellOVP.toFixed(3)} V (recovery ${s.cellOVPR.toFixed(3)} V)\n` +
     `Balance trigger: ${(s.balanceTriggerVoltage * 1000).toFixed(0)} mV  Start balance voltage: ${s.startBalanceVoltage.toFixed(3)} V  Max balance current: ${s.maxBalanceCurrent.toFixed(3)} A\n` +
     `Charge OTP: ${s.chargeOTP.toFixed(1)}°C (recovery ${s.chargeOTPRecovery.toFixed(1)}°C)  Discharge OTP: ${s.dischargeOTP.toFixed(1)}°C (recovery ${s.dischargeOTPRecovery.toFixed(1)}°C)\n` +
-    `Charging: ${s.chargingEnabled ? 'on' : 'off'}  Discharging: ${s.dischargingEnabled ? 'on' : 'off'}  Balancer: ${s.balancerEnabled ? 'on' : 'off'}`;
+    `Charge UTP: ${s.chargeUTP.toFixed(1)}°C (recovery ${s.chargeUTPRecovery.toFixed(1)}°C)  MOS OTP: ${s.mosOTP.toFixed(1)}°C (recovery ${s.mosOTPRecovery.toFixed(1)}°C)\n` +
+    `Charging: ${s.chargingEnabled ? 'on' : 'off'}  Discharging: ${s.dischargingEnabled ? 'on' : 'off'}  Balancer: ${s.balancerEnabled ? 'on' : 'off'}\n` +
+    `Smart sleep voltage: ${s.smartSleepVoltage.toFixed(3)} V  SOC 100%: ${s.soc100Voltage.toFixed(3)} V  SOC 0%: ${s.soc0Voltage.toFixed(3)} V\n` +
+    `Request charge voltage: ${s.cellRequestChargeVoltage.toFixed(3)} V  Request float voltage: ${s.cellRequestFloatVoltage.toFixed(3)} V  Power off voltage: ${s.powerOffVoltage.toFixed(3)} V\n` +
+    `Max charge current: ${s.maxChargeCurrent.toFixed(3)} A (OCP delay ${s.chargeOcpDelay}s, recovery ${s.chargeOcpRecoveryTime}s)\n` +
+    `Max discharge current: ${s.maxDischargeCurrent.toFixed(3)} A (OCP delay ${s.dischargeOcpDelay}s)\n` +
+    `Short circuit protection: delay ${s.shortCircuitProtectionDelay} µs (recovery ${s.shortCircuitProtectionRecoveryTime}s)`;
+
+  if (s.deviceAddress !== undefined) {
+    text +=
+      `\nDevice address: ${s.deviceAddress}  Precharge time: ${s.prechargeTime}s  Smart sleep delay: ${s.smartSleepDelay}\n` +
+      `Heating: ${s.heatingEnabled ? 'on' : 'off'} (start ${s.heatingStartTemperature}°C, stop ${s.heatingStopTemperature}°C)  Port: ${s.portMode}\n` +
+      `Discharge UTP: ${s.dischargeUTP}°C (recovery ${s.dischargeUTPRecovery}°C)\n` +
+      `Display always on: ${s.displayAlwaysOn ? 'yes' : 'no'}  Special charger: ${s.specialCharger ? 'yes' : 'no'}  Smart sleep: ${s.smartSleepEnabled ? 'on' : 'off'}  GPS heartbeat: ${s.gpsHeartbeat ? 'yes' : 'no'}`;
+  }
+
+  document.getElementById('settingsOutput').textContent = text;
 }
 
 // JK-BMS has two sibling frame layouts (see esphome-jk-bms/jk_bms_ble.cpp):
@@ -532,6 +594,8 @@ function updateCellChart(activeIndices, d) {
 }
 
 function render(d, diagnostics) {
+  lastUse32S = d.use32S;
+
   // Only show slots that correspond to real cells (unused slots read ~0)
   const activeIndices = d.cells
     .map((v, i) => ({ v, i }))
