@@ -214,6 +214,12 @@ function handleNotification(event) {
   } else if (frame[4] === 0x03) { // 0x03 = DEVICE_INFO
     try {
       lastDeviceInfo = decodeDeviceInfo(frame);
+      // device.id is an opaque, per-origin randomized identifier assigned by
+      // the browser (Web Bluetooth deliberately hides the real BLE MAC
+      // address from web pages), but it's still useful to tell multiple
+      // paired BMS units apart.
+      lastDeviceInfo.bluetoothId = device ? device.id : undefined;
+      lastDeviceInfo.bluetoothName = device ? device.name : undefined;
       renderDeviceInfo(lastDeviceInfo);
     } catch (err) {
       console.error(err);
@@ -269,7 +275,8 @@ function renderDeviceInfo(d) {
   document.getElementById('deviceInfoOutput').textContent =
     `Model: ${d.model}  Hardware: ${d.hwVersion}  Software: ${d.swVersion}\n` +
     `Serial number: ${d.serialNumber}  Manufactured: ${d.manufacturingDate}\n` +
-    `Uptime: ${formatDuration(d.uptimeSeconds)}  Power-on count: ${d.powerOnCount}`;
+    `Uptime: ${formatDuration(d.uptimeSeconds)}  Power-on count: ${d.powerOnCount}\n` +
+    `Bluetooth name: ${d.bluetoothName || '(unknown)'}  Bluetooth ID: ${d.bluetoothId || '(unknown)'}`;
 }
 
 // SETTINGS frame (type 0x01) layout, offsets from the start of the frame
@@ -643,6 +650,8 @@ function buildStatusPayload() {
   if (lastDeviceInfo) {
     const i = lastDeviceInfo;
     payload.deviceInfo = {
+      bluetoothId: i.bluetoothId,
+      bluetoothName: i.bluetoothName,
       model: i.model,
       hwVersion: i.hwVersion,
       swVersion: i.swVersion,
