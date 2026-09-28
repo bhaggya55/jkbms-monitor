@@ -9,7 +9,7 @@ phone or laptop.
 
 Live site: <https://bhaggya55.github.io/jkbms-monitor>
 
-[![Hits](https://hits.sh)](https://hits.sh)
+[![Hits](https://hits.sh/github.com/ArtLabss/tennis-tracking.svg)](https://hits.sh/github.com/ArtLabss/tennis-tracking/)
 
 ![JK-BMS Web Bluetooth Monitor screenshot](screenshot.jpeg)
 
