@@ -905,6 +905,33 @@ document.getElementById('requestLiveData').addEventListener('click', () => {
   sendCommand([0x96]).catch((e) => showError(e.message));
 });
 
+// Persist the Remote Sync URL across page reloads (only while it's valid).
+const REMOTE_SYNC_URL_STORAGE_KEY = 'jkbmsRemoteSyncUrl';
+
+(function loadSavedRemoteSyncUrl() {
+  try {
+    const saved = localStorage.getItem(REMOTE_SYNC_URL_STORAGE_KEY);
+    if (saved && isValidHttpUrl(saved)) {
+      document.getElementById('remoteSyncUrl').value = saved;
+    }
+  } catch (err) {
+    console.warn('Could not read saved Remote Sync URL', err);
+  }
+})();
+
+document.getElementById('remoteSyncUrl').addEventListener('input', (e) => {
+  const value = e.target.value.trim();
+  try {
+    if (value && isValidHttpUrl(value)) {
+      localStorage.setItem(REMOTE_SYNC_URL_STORAGE_KEY, value);
+    } else {
+      localStorage.removeItem(REMOTE_SYNC_URL_STORAGE_KEY);
+    }
+  } catch (err) {
+    console.warn('Could not save Remote Sync URL', err);
+  }
+});
+
 // Auto-connect on page load, but only to a device the user has already
 // granted permission to in a previous session (via the Connect button).
 // The Web Bluetooth API requires a user gesture for requestDevice() (the
