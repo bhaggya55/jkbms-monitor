@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
   <style>
     #cellChartWrap { position: relative; width: 100%; height: 320px; }
-    .gauge-wrap { position: relative; width: 200px; height: 145px; }
+    .gauge-wrap { position: relative; width: 400px; height: 290px; }
   </style>
 </head>
 <body>
@@ -390,8 +390,8 @@ function createGauge(canvasId, { min, max, colorFn, format, label }) {
       id: 'gaugeCenterText',
       afterDraw(c) {
         const lines = [];
-        if (label) lines.push({ text: label, font: '0.75rem sans-serif', color: '#6c757d' });
-        if (c.$gaugeText) lines.push({ text: c.$gaugeText, font: 'bold 1rem sans-serif', color: '#212529' });
+        if (label) lines.push({ text: label, font: '1.5rem sans-serif', color: '#6c757d' });
+        if (c.$gaugeText) lines.push({ text: c.$gaugeText, font: 'bold 2rem sans-serif', color: '#212529' });
         if (!lines.length) return;
 
         const { ctx } = c;
@@ -401,7 +401,7 @@ function createGauge(canvasId, { min, max, colorFn, format, label }) {
         const arcPoint = c.getDatasetMeta(0).data[0];
         const x = arcPoint.x;
         const lastLineY = arcPoint.y;
-        const lineHeight = 16;
+        const lineHeight = 32;
 
         ctx.save();
         ctx.textAlign = 'center';
