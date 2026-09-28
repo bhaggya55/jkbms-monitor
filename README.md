@@ -9,7 +9,8 @@ phone or laptop.
 
 Live site: <https://bhaggya55.github.io/jkbms-monitor>
 
-[![Hits](https://hits.sh/github.com/ArtLabss/tennis-tracking.svg)](https://hits.sh/github.com/ArtLabss/tennis-tracking/)
+[![Latest Release](https://img.shields.io/github/v/release/bhaggya55/jkbms-monitor?label=latest%20release)](https://github.com/bhaggya55/jkbms-monitor/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/bhaggya55/jkbms-monitor/total?label=downloads)](https://github.com/bhaggya55/jkbms-monitor/releases)
 
 ![JK-BMS Web Bluetooth Monitor screenshot](screenshot.jpeg)
 
