@@ -5,6 +5,8 @@ management system over Web Bluetooth and displays live cell voltages,
 pack power, state of charge, cell-voltage delta, device info, and the
 BMS's full configuration (settings).
 
+Live site: <https://bhaggya55.github.io/jkbms-monitor>
+
 ![JK-BMS Web Bluetooth Monitor screenshot](screenshot.png)
 
 ## Features
