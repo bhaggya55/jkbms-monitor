@@ -429,10 +429,14 @@ function render(d, diagnostics) {
   updateCellChart(activeIndices, d);
   updateGauges(d);
 
+  const activeVoltages = activeIndices.map((i) => d.cells[i]);
+  const minCellV = Math.min(...activeVoltages);
+  const maxCellV = Math.max(...activeVoltages);
+
   document.getElementById('output').textContent =
     `Detected protocol: JK02_${d.use32S ? '32S' : '24S'} (fit error 32S=${diagnostics.error32S.toFixed(3)} 24S=${diagnostics.error24S.toFixed(3)})\n` +
     `Pack: ${d.packVoltage.toFixed(2)} V | Current: ${d.current.toFixed(2)} A | Power: ${d.power.toFixed(0)} W\n` +
-    `SOC: ${d.soc}% | Avg cell: ${d.avgCellVoltage.toFixed(3)} V | Delta: ${(d.cellVoltageDelta * 1000).toFixed(0)} mV | Balance current: ${(d.balanceCurrent * 1000).toFixed(0)} mA\n` +
+    `SOC: ${d.soc}% | Max cell: ${maxCellV.toFixed(3)} V | Min cell: ${minCellV.toFixed(3)} V | Avg cell: ${d.avgCellVoltage.toFixed(3)} V | Delta: ${(d.cellVoltageDelta * 1000).toFixed(0)} mV | Balance current: ${(d.balanceCurrent * 1000).toFixed(0)} mA\n` +
     `Temp1: ${d.t1}°C  Temp2: ${d.t2}°C  MOS: ${d.mosTemp}°C`;
 }
 
