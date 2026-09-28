@@ -390,8 +390,8 @@ function createGauge(canvasId, { min, max, colorFn, format, label }) {
       id: 'gaugeCenterText',
       afterDraw(c) {
         const lines = [];
-        if (label) lines.push({ text: label, font: '1.5rem sans-serif', color: '#6c757d' });
-        if (c.$gaugeText) lines.push({ text: c.$gaugeText, font: 'bold 2rem sans-serif', color: '#212529' });
+        if (label) lines.push({ text: label, font: '0.75rem sans-serif', color: '#6c757d' });
+        if (c.$gaugeText) lines.push({ text: c.$gaugeText, font: 'bold 1rem sans-serif', color: '#212529' });
         if (!lines.length) return;
 
         const { ctx } = c;
@@ -401,7 +401,7 @@ function createGauge(canvasId, { min, max, colorFn, format, label }) {
         const arcPoint = c.getDatasetMeta(0).data[0];
         const x = arcPoint.x;
         const lastLineY = arcPoint.y;
-        const lineHeight = 32;
+        const lineHeight = 16;
 
         ctx.save();
         ctx.textAlign = 'center';
