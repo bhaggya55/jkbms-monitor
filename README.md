@@ -7,7 +7,7 @@ BMS's full configuration (settings).
 
 Live site: <https://bhaggya55.github.io/jkbms-monitor>
 
-![JK-BMS Web Bluetooth Monitor screenshot](screenshot.png)
+![JK-BMS Web Bluetooth Monitor screenshot](screenshot.jpeg)
 
 ## Features
 
