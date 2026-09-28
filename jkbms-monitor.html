@@ -287,7 +287,7 @@ function renderSettings(s) {
   document.getElementById('settingsCard').style.display = '';
   document.getElementById('settingsOutput').textContent =
     `Cell count: ${s.cellCount}  Nominal capacity: ${s.nominalCapacity.toFixed(1)} Ah\n` +
-    `Cell UVP: ${s.cellUVP.toFixed(3)} V  Cell UVPR: ${s.cellUVPR.toFixed(3)} V  Cell OVP: ${s.cellOVP.toFixed(3)} V  Cell OVPR: ${s.cellOVPR.toFixed(3)} V\n` +
+    `Cell UVP: ${s.cellUVP.toFixed(3)} V (recovery ${s.cellUVPR.toFixed(3)} V)  Cell OVP: ${s.cellOVP.toFixed(3)} V (recovery ${s.cellOVPR.toFixed(3)} V)\n` +
     `Balance trigger: ${(s.balanceTriggerVoltage * 1000).toFixed(0)} mV  Start balance voltage: ${s.startBalanceVoltage.toFixed(3)} V  Max balance current: ${s.maxBalanceCurrent.toFixed(3)} A\n` +
     `Charge OTP: ${s.chargeOTP.toFixed(1)}°C (recovery ${s.chargeOTPRecovery.toFixed(1)}°C)  Discharge OTP: ${s.dischargeOTP.toFixed(1)}°C (recovery ${s.dischargeOTPRecovery.toFixed(1)}°C)\n` +
     `Charging: ${s.chargingEnabled ? 'on' : 'off'}  Discharging: ${s.dischargingEnabled ? 'on' : 'off'}  Balancer: ${s.balancerEnabled ? 'on' : 'off'}`;
