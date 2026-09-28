@@ -85,6 +85,15 @@
       </div>
     </div>
 
+    <div id="remoteSyncCard" class="card mb-3" style="display:none">
+      <div class="card-header">Remote Sync</div>
+      <div class="card-body">
+        <label for="remoteSyncUrl" class="form-label">POST status JSON to URL (optional)</label>
+        <input type="url" id="remoteSyncUrl" class="form-control" placeholder="https://example.com/webhook">
+        <pre id="remoteSyncStatus" class="mb-0 mt-2 text-body-secondary small"></pre>
+      </div>
+    </div>
+
     <footer class="text-center text-body-secondary small pb-2">
       <a href="https://bhaggya55.github.io/jkbms-monitor" target="_blank" rel="noopener noreferrer">bhaggya55.github.io/jkbms-monitor</a>
     </footer>
@@ -117,6 +126,10 @@ let frameCount = 0;
 let liveDataCount = 0;
 let lastFrameAt = 0;
 let lastLiveDataAt = 0;
+let lastDeviceInfo = null;
+let lastSettingsData = null;
+let lastLiveData = null;
+let remoteSyncInFlight = false;
 
 const FRAME_TYPE_NAMES = { 0x01: 'SETTINGS', 0x02: 'LIVE_DATA', 0x03: 'DEVICE_INFO' };
 
@@ -193,13 +206,15 @@ function handleNotification(event) {
     }
   } else if (frame[4] === 0x01) { // 0x01 = SETTINGS
     try {
-      renderSettings(decodeSettings(frame));
+      lastSettingsData = decodeSettings(frame);
+      renderSettings(lastSettingsData);
     } catch (err) {
       console.error(err);
     }
   } else if (frame[4] === 0x03) { // 0x03 = DEVICE_INFO
     try {
-      renderDeviceInfo(decodeDeviceInfo(frame));
+      lastDeviceInfo = decodeDeviceInfo(frame);
+      renderDeviceInfo(lastDeviceInfo);
     } catch (err) {
       console.error(err);
     }
@@ -595,6 +610,7 @@ function updateCellChart(activeIndices, d) {
 
 function render(d, diagnostics) {
   lastUse32S = d.use32S;
+  lastLiveData = d;
 
   // Only show slots that correspond to real cells (unused slots read ~0)
   const activeIndices = d.cells
@@ -614,6 +630,152 @@ function render(d, diagnostics) {
     `Pack: ${d.packVoltage.toFixed(2)} V | Current: ${d.current.toFixed(2)} A | Power: ${d.power.toFixed(0)} W\n` +
     `SOC: ${d.soc}% | Max cell: ${maxCellV.toFixed(3)} V | Min cell: ${minCellV.toFixed(3)} V | Avg cell: ${d.avgCellVoltage.toFixed(3)} V | Delta: ${(d.cellVoltageDelta * 1000).toFixed(0)} mV | Balance current: ${(d.balanceCurrent * 1000).toFixed(0)} mA\n` +
     `Temp1: ${d.t1}°C  Temp2: ${d.t2}°C  MOS: ${d.mosTemp}°C`;
+
+  sendStatusPayload();
+}
+
+// Combines the latest decoded DEVICE_INFO/SETTINGS/LIVE_DATA frames into one
+// JSON object, grouped by frame type, with closely-related fields kept next
+// to each other (e.g. cellUVP right next to cellUVPR) for readability.
+function buildStatusPayload() {
+  const payload = { timestamp: new Date().toISOString() };
+
+  if (lastDeviceInfo) {
+    const i = lastDeviceInfo;
+    payload.deviceInfo = {
+      model: i.model,
+      hwVersion: i.hwVersion,
+      swVersion: i.swVersion,
+      serialNumber: i.serialNumber,
+      manufacturingDate: i.manufacturingDate,
+      uptimeSeconds: i.uptimeSeconds,
+      powerOnCount: i.powerOnCount,
+    };
+  }
+
+  if (lastSettingsData) {
+    const s = lastSettingsData;
+    const settings = {
+      cellCount: s.cellCount,
+      nominalCapacity: s.nominalCapacity,
+      cellUVP: s.cellUVP,
+      cellUVPR: s.cellUVPR,
+      cellOVP: s.cellOVP,
+      cellOVPR: s.cellOVPR,
+      balanceTriggerVoltage: s.balanceTriggerVoltage,
+      startBalanceVoltage: s.startBalanceVoltage,
+      maxBalanceCurrent: s.maxBalanceCurrent,
+      smartSleepVoltage: s.smartSleepVoltage,
+      soc100Voltage: s.soc100Voltage,
+      soc0Voltage: s.soc0Voltage,
+      cellRequestChargeVoltage: s.cellRequestChargeVoltage,
+      cellRequestFloatVoltage: s.cellRequestFloatVoltage,
+      powerOffVoltage: s.powerOffVoltage,
+      maxChargeCurrent: s.maxChargeCurrent,
+      chargeOcpDelay: s.chargeOcpDelay,
+      chargeOcpRecoveryTime: s.chargeOcpRecoveryTime,
+      maxDischargeCurrent: s.maxDischargeCurrent,
+      dischargeOcpDelay: s.dischargeOcpDelay,
+      shortCircuitProtectionDelay: s.shortCircuitProtectionDelay,
+      shortCircuitProtectionRecoveryTime: s.shortCircuitProtectionRecoveryTime,
+      chargeOTP: s.chargeOTP,
+      chargeOTPRecovery: s.chargeOTPRecovery,
+      dischargeOTP: s.dischargeOTP,
+      dischargeOTPRecovery: s.dischargeOTPRecovery,
+      chargeUTP: s.chargeUTP,
+      chargeUTPRecovery: s.chargeUTPRecovery,
+      mosOTP: s.mosOTP,
+      mosOTPRecovery: s.mosOTPRecovery,
+      chargingEnabled: s.chargingEnabled,
+      dischargingEnabled: s.dischargingEnabled,
+      balancerEnabled: s.balancerEnabled,
+    };
+
+    if (s.deviceAddress !== undefined) {
+      Object.assign(settings, {
+        deviceAddress: s.deviceAddress,
+        prechargeTime: s.prechargeTime,
+        smartSleepEnabled: s.smartSleepEnabled,
+        smartSleepDelay: s.smartSleepDelay,
+        heatingEnabled: s.heatingEnabled,
+        heatingStartTemperature: s.heatingStartTemperature,
+        heatingStopTemperature: s.heatingStopTemperature,
+        dischargeUTP: s.dischargeUTP,
+        dischargeUTPRecovery: s.dischargeUTPRecovery,
+        portMode: s.portMode,
+        displayAlwaysOn: s.displayAlwaysOn,
+        specialCharger: s.specialCharger,
+        gpsHeartbeat: s.gpsHeartbeat,
+        disableTemperatureSensors: s.disableTemperatureSensors,
+        disablePclModule: s.disablePclModule,
+      });
+    }
+
+    payload.settings = settings;
+  }
+
+  if (lastLiveData) {
+    const d = lastLiveData;
+    const activeVoltages = d.cells.filter((v) => v > 0.5);
+    payload.liveData = {
+      protocol: d.use32S ? 'JK02_32S' : 'JK02_24S',
+      packVoltage: d.packVoltage,
+      current: d.current,
+      power: d.power,
+      soc: d.soc,
+      minCellVoltage: activeVoltages.length ? Math.min(...activeVoltages) : null,
+      maxCellVoltage: activeVoltages.length ? Math.max(...activeVoltages) : null,
+      avgCellVoltage: d.avgCellVoltage,
+      cellVoltageDelta: d.cellVoltageDelta,
+      balanceCurrent: d.balanceCurrent,
+      t1: d.t1,
+      t2: d.t2,
+      mosTemp: d.mosTemp,
+      cells: activeVoltages,
+    };
+  }
+
+  return payload;
+}
+
+function isValidHttpUrl(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function setRemoteSyncStatus(message, isError) {
+  const el = document.getElementById('remoteSyncStatus');
+  el.textContent = message;
+  el.classList.toggle('text-danger', !!isError);
+  el.classList.toggle('text-body-secondary', !isError);
+}
+
+// Posts the combined status JSON to the user-provided URL, if any. Never
+// throws or shows a popup on failure; all outcomes are reflected in the
+// Remote Sync status area instead.
+async function sendStatusPayload() {
+  const url = document.getElementById('remoteSyncUrl').value.trim();
+  if (!url || !isValidHttpUrl(url)) return;
+  if (remoteSyncInFlight) return; // avoid piling up overlapping requests
+
+  remoteSyncInFlight = true;
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildStatusPayload()),
+    });
+    const text = await response.text();
+    setRemoteSyncStatus(`HTTP ${response.status} ${response.statusText}${text ? ': ' + text : ''}`, !response.ok);
+  } catch (err) {
+    setRemoteSyncStatus(`Request failed: ${err.message}`, true);
+  } finally {
+    remoteSyncInFlight = false;
+  }
 }
 
 function setConnectedUi(connected) {
@@ -622,6 +784,7 @@ function setConnectedUi(connected) {
   document.getElementById('packStatusCard').style.display = display;
   document.getElementById('cellVoltagesCard').style.display = display;
   document.getElementById('packSummaryCard').style.display = display;
+  document.getElementById('remoteSyncCard').style.display = display;
 }
 
 async function setupConnection() {
