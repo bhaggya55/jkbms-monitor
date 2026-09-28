@@ -101,6 +101,7 @@ const RESP_HEADER = [0x55, 0xaa, 0xeb, 0x90];
 const FRAME_LENGTH = 300;
 
 const STALE_DATA_TIMEOUT_MS = 10000; // if no frame arrives for this long, assume the link is dead
+const LIVE_DATA_REQUEST_THRESHOLD_MS = 5000; // only request LIVE_DATA if none auto-arrived in this window
 const RECONNECT_BASE_DELAY_MS = 2000;
 const RECONNECT_MAX_DELAY_MS = 15000;
 const MAX_RECONNECT_ATTEMPTS = 10;
@@ -115,6 +116,7 @@ let reconnecting = false;
 let frameCount = 0;
 let liveDataCount = 0;
 let lastFrameAt = 0;
+let lastLiveDataAt = 0;
 
 const FRAME_TYPE_NAMES = { 0x01: 'SETTINGS', 0x02: 'LIVE_DATA', 0x03: 'DEVICE_INFO' };
 
@@ -181,6 +183,7 @@ function handleNotification(event) {
 
   if (frame[4] === 0x02) { // 0x02 = LIVE_DATA
     liveDataCount++;
+    lastLiveDataAt = Date.now();
     try {
       parseLiveData(frame);
       showError('');
@@ -564,11 +567,16 @@ async function setupConnection() {
   await sendCommand([0x97]); // request DEVICE_INFO
   await new Promise((r) => setTimeout(r, 400));
   await sendCommand([0x96]); // request LIVE_DATA (cell info)
+  lastLiveDataAt = Date.now();
 
-  // Some JK-BMS units don't free-stream continuously; poll for fresh
-  // live-data frames periodically as a safety net.
+  // Some JK-BMS units free-stream LIVE_DATA on their own; only request it
+  // ourselves if none has arrived recently, to avoid duplicate frames.
   if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(() => sendCommand([0x96]).catch((e) => showError(e.message)), 2000);
+  pollTimer = setInterval(() => {
+    if (Date.now() - lastLiveDataAt > LIVE_DATA_REQUEST_THRESHOLD_MS) {
+      sendCommand([0x96]).catch((e) => showError(e.message));
+    }
+  }, 1000);
 
   lastFrameAt = Date.now();
   if (watchdogTimer) clearInterval(watchdogTimer);
