@@ -12,6 +12,12 @@
 </head>
 <body>
   <div class="container-fluid px-4 py-3">
+    <div id="unsupportedWarning" class="alert alert-warning d-none" role="alert">
+      <strong>Web Bluetooth is not available in this browser.</strong>
+      This app requires a Chromium-based browser (Chrome, Edge, Opera, Brave, etc.) on desktop or Android.
+      Firefox and Safari do not support the Web Bluetooth API. Please open this page in Chrome or Edge.
+    </div>
+
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
       <h1 class="h3 mb-0">JK-BMS Web Bluetooth Monitor</h1>
       <div class="d-flex gap-2">
@@ -503,7 +509,26 @@ function wireDeviceAndConnect(d) {
   return setupConnection();
 }
 
+// Feature-detect Web Bluetooth support. Firefox and Safari never implement
+// navigator.bluetooth at all (not even as a stub), so any use of it throws
+// immediately. Check upfront and show a clear banner instead of a cryptic
+// "can't access property requestDevice, navigator.bluetooth is undefined" error.
+function checkBluetoothSupport() {
+  if (navigator.bluetooth) return true;
+
+  document.getElementById('unsupportedWarning').classList.remove('d-none');
+  const connectBtn = document.getElementById('connect');
+  connectBtn.disabled = true;
+  connectBtn.title = 'Web Bluetooth is not supported in this browser.';
+  document.getElementById('status').textContent =
+    'This browser does not support the Web Bluetooth API. Please open this page in Chrome or Edge.';
+  return false;
+}
+
+const bluetoothSupported = checkBluetoothSupport();
+
 document.getElementById('connect').addEventListener('click', async () => {
+  if (!checkBluetoothSupport()) return;
   try {
     const d = await navigator.bluetooth.requestDevice({
       filters: [{ services: [SERVICE_UUID] }]
@@ -556,7 +581,9 @@ async function tryAutoConnect() {
   }
 }
 
-tryAutoConnect();
+if (bluetoothSupported) {
+  tryAutoConnect();
+}
 </script>
 </body>
 </html>
