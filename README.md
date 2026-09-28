@@ -8,7 +8,7 @@ pack power, state of charge, and cell-voltage delta.
 
 ## Usage
 
-Open [jkbms-monitor.html](jkbms-monitor.html) in a Chromium-based browser
+Open [index.html](index.html) in a Chromium-based browser
 (Chrome or Edge) that supports the Web Bluetooth API, then click **Connect
 to JK-BMS** and select your BMS from the device picker.
 
