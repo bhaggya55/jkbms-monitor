@@ -53,19 +53,28 @@ see [Comparison with other tools](#comparison-with-other-tools).
 - **Pack Status** — power, SOC, and cell-voltage-delta gauges.
 - **Cell Voltages** — a live bar chart of every active cell, with the
   min/max cells highlighted.
-- **Pack Summary** — pack voltage/current/power, SOC, min/max/average cell
-  voltage, delta, balance current, and temperatures as at-a-glance tiles.
+- **BMS Status** — the actual charge/discharge MOSFET states (as opposed to
+  the configured switches), precharge, balancing, charge stage, heating,
+  charger, PCL module, dry contacts, emergency mode, smart sleep countdown,
+  active alarms by name, protection release countdowns, and per-cell
+  wire-resistance warnings.
+- **Pack Summary** — pack voltage/current/power, SOC, remaining/full
+  capacity, state of health, cycle count, total cycled capacity,
+  min/max/average cell voltage, delta, balance current, and temperatures
+  as at-a-glance tiles.
 - **Device Info** — model, hardware/software version, serial number,
-  manufacturing date, uptime, power-on count, and the browser-assigned
-  Bluetooth identifier (`device.id`/`device.name` — Web Bluetooth
-  deliberately hides the real BLE MAC address from web pages, so this is
-  the closest available identifier).
+  manufacturing date, uptime (from the per-second runtime counter),
+  power-on count, battery type, log entry count, UART/CAN protocols, and
+  the browser-assigned Bluetooth identifier (`device.id`/`device.name` —
+  Web Bluetooth deliberately hides the real BLE MAC address from web pages,
+  so this is the closest available identifier).
 - **Settings** — nearly every field from the BMS's SETTINGS frame:
   voltage protection thresholds (UVP/OVP with recovery), balance settings,
   charge/discharge current limits with OCP delay/recovery, over/under
   temperature protection with recovery, short-circuit protection timing,
-  and (on JK02_32S packs) extended fields like device address, precharge
-  time, and heating settings.
+  per-cell wire-resistance compensation, and (on JK02_32S packs) extended
+  fields like device address, precharge time, heating settings, and the
+  full set of configured switches.
 - **Remote Sync** — optionally POST a combined JSON snapshot of Device
   Info, Settings, and Live Data to a URL of your choice, at a configurable
   interval — including to local-network addresses.
