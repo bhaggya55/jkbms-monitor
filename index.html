@@ -263,34 +263,52 @@ async function sendCommand(code) {
   await characteristic.writeValueWithoutResponse(buildCommand(code));
 }
 
-function startsWithHeader(buf, header) {
-  return buf.length >= header.length && header.every((v, i) => buf[i] === v);
+function indexOfHeader(buf, header, from = 0) {
+  for (let i = from; i <= buf.length - header.length; i++) {
+    if (header.every((v, j) => buf[i + j] === v)) return i;
+  }
+  return -1;
 }
 
+// The BMS's BLE module splits its UART byte stream into notifications without
+// regard to frame boundaries, so a frame header can land in the middle of a
+// chunk, e.g. when a requested DEVICE_INFO/SETTINGS frame immediately follows a
+// free-streamed LIVE_DATA frame. Treat notifications as one byte stream and
+// scan it for headers instead of assuming every frame starts a new chunk.
 function handleNotification(event) {
   const chunk = new Uint8Array(event.target.value.buffer);
+  const merged = new Uint8Array(responseBuffer.length + chunk.length);
+  merged.set(responseBuffer, 0);
+  merged.set(chunk, responseBuffer.length);
+  responseBuffer = merged;
 
-  if (startsWithHeader(chunk, RESP_HEADER)) {
-    responseBuffer = chunk;
-  } else if (startsWithHeader(responseBuffer, RESP_HEADER)) {
-    const merged = new Uint8Array(responseBuffer.length + chunk.length);
-    merged.set(responseBuffer, 0);
-    merged.set(chunk, responseBuffer.length);
-    responseBuffer = merged;
-  } else {
-    return; // garbage before first header, ignore
+  for (;;) {
+    const start = indexOfHeader(responseBuffer, RESP_HEADER);
+    if (start === -1) {
+      // Keep a possible partial header at the end; drop everything else.
+      responseBuffer = responseBuffer.slice(-(RESP_HEADER.length - 1));
+      return;
+    }
+    if (responseBuffer.length - start < FRAME_LENGTH) {
+      responseBuffer = responseBuffer.slice(start); // wait for more chunks
+      return;
+    }
+
+    const frame = responseBuffer.slice(start, start + FRAME_LENGTH);
+    if (checksum(frame.slice(0, -1)) !== frame[FRAME_LENGTH - 1]) {
+      // Likely a truncated frame with the next one starting inside it; resume
+      // scanning just past this header.
+      console.warn('Bad checksum, dropping frame');
+      responseBuffer = responseBuffer.slice(start + 1);
+      continue;
+    }
+
+    responseBuffer = responseBuffer.slice(start + FRAME_LENGTH);
+    processFrame(frame);
   }
+}
 
-  if (responseBuffer.length < FRAME_LENGTH) return; // wait for more chunks
-
-  const frame = responseBuffer.slice(0, FRAME_LENGTH);
-  responseBuffer = new Uint8Array(0);
-
-  if (checksum(frame.slice(0, -1)) !== frame[FRAME_LENGTH - 1]) {
-    console.warn('Bad checksum, dropping frame');
-    return;
-  }
-
+function processFrame(frame) {
   frameCount++;
   lastFrameAt = Date.now();
   document.getElementById('rawFrame').textContent = bufferToHex(frame);
@@ -383,7 +401,7 @@ function renderDeviceInfo(d) {
     infoHw: d.hwVersion,
     infoSw: d.swVersion,
     infoManufactured: d.manufacturingDate,
-    infoUptime: formatDuration(d.uptimeSeconds),
+    infoUptime: formatDuration(currentUptimeSeconds(d)),
     infoPowerOnCount: d.powerOnCount,
     infoBtName: d.bluetoothName || '(unknown)',
     infoBtId: d.bluetoothId || '(unknown)',
@@ -393,6 +411,19 @@ function renderDeviceInfo(d) {
     el.textContent = value === '' || value === undefined ? '–' : value;
     el.title = el.textContent; // full value on hover when truncated
   }
+}
+
+// Prefers the per-second runtime counter from LIVE_DATA over the coarse
+// DEVICE_INFO uptime.
+function currentUptimeSeconds(deviceInfo) {
+  return lastLiveData ? lastLiveData.runtimeSeconds : deviceInfo.uptimeSeconds;
+}
+
+function renderUptime() {
+  if (!lastDeviceInfo) return; // Device Info card isn't shown yet
+  const el = document.getElementById('infoUptime');
+  el.textContent = formatDuration(currentUptimeSeconds(lastDeviceInfo));
+  el.title = el.textContent;
 }
 
 // SETTINGS frame (type 0x01) layout, offsets from the start of the frame
@@ -619,10 +650,13 @@ function decodeFrame(frame, use32S) {
   const mosTemp = use32S ? s16(112 + offsetB) / 10 : s16(134 + offsetB) / 10;
   const balanceCurrent = s16(138 + offsetB) / 1000;
   const soc = frame[141 + offsetB];
+  // Same counter as DEVICE_INFO uptime, but that copy only advances in
+  // 5-minute steps; this one ticks every second.
+  const runtimeSeconds = u32(162 + offsetB);
 
   return {
     use32S, cells, resistances, avgCellVoltage, cellVoltageDelta,
-    balanceCurrent, packVoltage, power, current, t1, t2, mosTemp, soc,
+    balanceCurrent, packVoltage, power, current, t1, t2, mosTemp, soc, runtimeSeconds,
   };
 }
 
@@ -879,6 +913,7 @@ function render(d, diagnostics) {
   const maxCellV = Math.max(...activeVoltages);
 
   renderPackSummary(d, diagnostics, minCellV, maxCellV);
+  renderUptime();
 
   sendStatusPayload();
 }
@@ -991,6 +1026,7 @@ function buildStatusPayload() {
       t1: d.t1,
       t2: d.t2,
       mosTemp: d.mosTemp,
+      runtimeSeconds: d.runtimeSeconds,
       cells: activeVoltages,
     };
   }
