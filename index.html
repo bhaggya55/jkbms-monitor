@@ -8,6 +8,33 @@
   <style>
     #cellChartWrap { position: relative; width: 100%; height: 320px; }
     .gauge-wrap { position: relative; width: 300px; height: 218px; }
+    /* On phones the gauges stack; size each box to the half-doughnut itself
+       (2:1) so there's no blank band above/below it, and let it shrink on
+       screens narrower than 300px. */
+    @media (max-width: 575.98px) {
+      /* min-height/overflow stop the canvas's own size from overriding the ratio */
+      .gauge-wrap { width: 100%; max-width: 300px; height: auto; aspect-ratio: 300 / 154; min-height: 0; overflow: hidden; margin: 0 auto; }
+    }
+
+    .section-label { font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--bs-secondary-color); margin-bottom: .35rem; }
+    .stat-tile { height: 100%; padding: .5rem .75rem; border: 1px solid var(--bs-border-color); border-radius: var(--bs-border-radius); background: var(--bs-tertiary-bg); }
+    .stat-tile .stat-label { font-size: .75rem; color: var(--bs-secondary-color); }
+    .stat-tile .stat-value { font-size: 1.35rem; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .stat-tile .stat-unit { font-size: .8rem; font-weight: 400; color: var(--bs-secondary-color); margin-left: .15rem; }
+    .stat-tile .stat-sub { font-size: .7rem; color: var(--bs-secondary-color); }
+    .text-charge { color: var(--bs-success); }
+    .text-discharge, .text-cell-max { color: #fd7e14; }
+    .text-cell-min { color: var(--bs-danger); }
+
+    .status-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+    .kv-label { font-size: .75rem; color: var(--bs-secondary-color); }
+    .kv-value { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .settings-table { font-size: .85rem; margin-bottom: 0; }
+    .settings-table th, .settings-table td { padding: .2rem .4rem; }
+    .settings-table thead th { font-size: .7rem; font-weight: 600; color: var(--bs-secondary-color); }
+    .settings-table td:not(:first-child), .settings-table th:not(:first-child) { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
@@ -29,14 +56,14 @@
     <div id="packStatusCard" class="card mb-3" style="display:none">
       <div class="card-header text-center">Pack Status</div>
       <div class="card-body">
-        <div class="row justify-content-center text-center g-4">
-          <div class="col-auto">
+        <div class="row justify-content-center text-center gx-4 gy-3 gy-sm-4">
+          <div class="col-12 col-sm-auto">
             <div class="gauge-wrap"><canvas id="powerGauge"></canvas></div>
           </div>
-          <div class="col-auto">
+          <div class="col-12 col-sm-auto">
             <div class="gauge-wrap"><canvas id="socGauge"></canvas></div>
           </div>
-          <div class="col-auto">
+          <div class="col-12 col-sm-auto">
             <div class="gauge-wrap"><canvas id="deltaGauge"></canvas></div>
           </div>
         </div>
@@ -53,9 +80,32 @@
     </div>
 
     <div id="packSummaryCard" class="card mb-3" style="display:none">
-      <div class="card-header">Pack Summary</div>
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Pack Summary</span>
+        <span id="protocolBadge" class="badge text-bg-secondary fw-normal"></span>
+      </div>
       <div class="card-body">
-        <pre id="output" class="mb-0"></pre>
+        <div class="section-label">Pack</div>
+        <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
+          <div class="col"><div class="stat-tile"><div class="stat-label">Voltage</div><div class="stat-value"><span id="sumPackVoltage">–</span><span class="stat-unit">V</span></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">Current</div><div class="stat-value"><span id="sumCurrent">–</span><span class="stat-unit">A</span></div><div id="sumCurrentState" class="stat-sub"></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">Power</div><div class="stat-value"><span id="sumPower">–</span><span class="stat-unit">W</span></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">State of charge</div><div class="stat-value"><span id="sumSoc">–</span><span class="stat-unit">%</span></div></div></div>
+        </div>
+        <div class="section-label">Cells</div>
+        <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-2 mb-3">
+          <div class="col"><div class="stat-tile"><div class="stat-label">Max cell</div><div class="stat-value"><span id="sumMaxCell" class="text-cell-max">–</span><span class="stat-unit">V</span></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">Min cell</div><div class="stat-value"><span id="sumMinCell" class="text-cell-min">–</span><span class="stat-unit">V</span></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">Average cell</div><div class="stat-value"><span id="sumAvgCell">–</span><span class="stat-unit">V</span></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">Delta</div><div class="stat-value"><span id="sumDelta">–</span><span class="stat-unit">mV</span></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">Balance current</div><div class="stat-value"><span id="sumBalanceCurrent">–</span><span class="stat-unit">mA</span></div></div></div>
+        </div>
+        <div class="section-label">Temperatures</div>
+        <div class="row row-cols-3 g-2">
+          <div class="col"><div class="stat-tile"><div class="stat-label">Sensor 1</div><div class="stat-value"><span id="sumT1">–</span><span class="stat-unit">°C</span></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">Sensor 2</div><div class="stat-value"><span id="sumT2">–</span><span class="stat-unit">°C</span></div></div></div>
+          <div class="col"><div class="stat-tile"><div class="stat-label">MOSFET</div><div class="stat-value"><span id="sumMosTemp">–</span><span class="stat-unit">°C</span></div></div></div>
+        </div>
       </div>
     </div>
 
@@ -64,33 +114,78 @@
       <pre id="rawFrame" class="small text-break bg-body-tertiary p-2 rounded"></pre>
     </details>
 
+    <div class="row g-3 mb-3">
+      <div id="deviceInfoCard" class="col-lg-4" style="display:none">
+        <div class="card h-100">
+          <div class="card-header">Device Info</div>
+          <div class="card-body">
+            <div class="row row-cols-2 row-cols-md-3 row-cols-lg-2 g-3">
+              <div class="col"><div class="kv-label">Model</div><div id="infoModel" class="kv-value"></div></div>
+              <div class="col"><div class="kv-label">Serial number</div><div id="infoSerial" class="kv-value"></div></div>
+              <div class="col"><div class="kv-label">Hardware</div><div id="infoHw" class="kv-value"></div></div>
+              <div class="col"><div class="kv-label">Software</div><div id="infoSw" class="kv-value"></div></div>
+              <div class="col"><div class="kv-label">Manufactured</div><div id="infoManufactured" class="kv-value"></div></div>
+              <div class="col"><div class="kv-label">Uptime</div><div id="infoUptime" class="kv-value"></div></div>
+              <div class="col"><div class="kv-label">Power-on count</div><div id="infoPowerOnCount" class="kv-value"></div></div>
+              <div class="col"><div class="kv-label">Bluetooth name</div><div id="infoBtName" class="kv-value"></div></div>
+              <div class="col-12"><div class="kv-label">Bluetooth ID</div><div id="infoBtId" class="kv-value font-monospace small"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="settingsCard" class="col-lg" style="display:none">
+        <div class="card h-100">
+          <div class="card-header">Settings</div>
+          <div id="settingsOutput" class="card-body"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="card mb-3">
       <div class="card-body">
-        <pre id="status" class="mb-2 text-body-secondary small"></pre>
-        <pre id="error" class="mb-0 text-danger small"></pre>
-      </div>
-    </div>
-
-    <div id="deviceInfoCard" class="card mb-3" style="display:none">
-      <div class="card-header">Device Info</div>
-      <div class="card-body">
-        <pre id="deviceInfoOutput" class="mb-0"></pre>
-      </div>
-    </div>
-
-    <div id="settingsCard" class="card mb-3" style="display:none">
-      <div class="card-header">Settings</div>
-      <div class="card-body">
-        <pre id="settingsOutput" class="mb-0"></pre>
+        <pre id="status" class="status-text mb-2 text-body-secondary small"></pre>
+        <pre id="error" class="status-text mb-0 text-danger small"></pre>
       </div>
     </div>
 
     <div id="remoteSyncCard" class="card mb-3" style="display:none">
-      <div class="card-header">Remote Sync</div>
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Remote Sync</span>
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" role="switch" id="remoteSyncEnabled">
+          <label class="form-check-label" for="remoteSyncEnabled" id="remoteSyncEnabledLabel">Off</label>
+        </div>
+      </div>
       <div class="card-body">
-        <label for="remoteSyncUrl" class="form-label">POST status JSON to URL (optional)</label>
-        <input type="url" id="remoteSyncUrl" class="form-control" placeholder="https://example.com/webhook">
-        <pre id="remoteSyncStatus" class="mb-0 mt-2 text-body-secondary small"></pre>
+        <label for="remoteSyncUrl" class="form-label">POST status JSON to URL</label>
+        <input type="url" id="remoteSyncUrl" class="form-control" placeholder="https://example.com/webhook or http://192.168.1.10:8123/api/webhook/...">
+        <div class="row g-2 mt-1">
+          <div class="col-sm-6">
+            <label for="remoteSyncInterval" class="form-label small mb-1">Send at most every</label>
+            <select id="remoteSyncInterval" class="form-select form-select-sm">
+              <option value="0">Every live frame</option>
+              <option value="5">5 seconds</option>
+              <option value="10" selected>10 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="60">1 minute</option>
+              <option value="300">5 minutes</option>
+            </select>
+          </div>
+          <div class="col-sm-6">
+            <label for="remoteSyncMode" class="form-label small mb-1">Request mode</label>
+            <select id="remoteSyncMode" class="form-select form-select-sm">
+              <option value="cors" selected>JSON (server must allow CORS)</option>
+              <option value="simple">Simple (no CORS needed, response hidden)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-text">
+          Settings are locked while sync is on. Local addresses (e.g. <code>http://192.168.x.x</code>, <code>*.local</code>)
+          work from the hosted site in Chrome/Edge after you allow local network access when prompted.
+          Use <em>Simple</em> mode if the server doesn't send CORS headers (Home Assistant, Node-RED, Google Apps Script).
+        </div>
+        <pre id="remoteSyncStatus" class="status-text mb-0 mt-2 text-body-secondary small"></pre>
       </div>
     </div>
 
@@ -116,6 +211,7 @@ const LIVE_DATA_REQUEST_THRESHOLD_MS = 5000; // only request LIVE_DATA if none a
 const RECONNECT_BASE_DELAY_MS = 2000;
 const RECONNECT_MAX_DELAY_MS = 15000;
 const MAX_RECONNECT_ATTEMPTS = 10;
+const INFO_REFRESH_INTERVAL_MS = 30000; // re-request DEVICE_INFO + SETTINGS this often
 
 let device;
 let characteristic;
@@ -128,10 +224,14 @@ let frameCount = 0;
 let liveDataCount = 0;
 let lastFrameAt = 0;
 let lastLiveDataAt = 0;
+let infoRefreshTimer;
 let lastDeviceInfo = null;
 let lastSettingsData = null;
+let lastSettingsFrame = null; // kept so settings can be re-decoded once the protocol (24S/32S) is known
+let lastSettingsAt = 0;
 let lastLiveData = null;
 let remoteSyncInFlight = false;
+let lastRemoteSyncAt = 0;
 
 const FRAME_TYPE_NAMES = { 0x01: 'SETTINGS', 0x02: 'LIVE_DATA', 0x03: 'DEVICE_INFO' };
 
@@ -208,6 +308,8 @@ function handleNotification(event) {
     }
   } else if (frame[4] === 0x01) { // 0x01 = SETTINGS
     try {
+      lastSettingsFrame = frame;
+      lastSettingsAt = Date.now();
       lastSettingsData = decodeSettings(frame);
       renderSettings(lastSettingsData);
     } catch (err) {
@@ -222,6 +324,7 @@ function handleNotification(event) {
       // paired BMS units apart.
       lastDeviceInfo.bluetoothId = device ? device.id : undefined;
       lastDeviceInfo.bluetoothName = device ? device.name : undefined;
+      lastDeviceInfo.receivedAt = Date.now();
       renderDeviceInfo(lastDeviceInfo);
     } catch (err) {
       console.error(err);
@@ -274,11 +377,22 @@ function decodeDeviceInfo(frame) {
 
 function renderDeviceInfo(d) {
   document.getElementById('deviceInfoCard').style.display = '';
-  document.getElementById('deviceInfoOutput').textContent =
-    `Model: ${d.model}  Hardware: ${d.hwVersion}  Software: ${d.swVersion}\n` +
-    `Serial number: ${d.serialNumber}  Manufactured: ${d.manufacturingDate}\n` +
-    `Uptime: ${formatDuration(d.uptimeSeconds)}  Power-on count: ${d.powerOnCount}\n` +
-    `Bluetooth name: ${d.bluetoothName || '(unknown)'}  Bluetooth ID: ${d.bluetoothId || '(unknown)'}`;
+  const fields = {
+    infoModel: d.model,
+    infoSerial: d.serialNumber,
+    infoHw: d.hwVersion,
+    infoSw: d.swVersion,
+    infoManufactured: d.manufacturingDate,
+    infoUptime: formatDuration(d.uptimeSeconds),
+    infoPowerOnCount: d.powerOnCount,
+    infoBtName: d.bluetoothName || '(unknown)',
+    infoBtId: d.bluetoothId || '(unknown)',
+  };
+  for (const [id, value] of Object.entries(fields)) {
+    const el = document.getElementById(id);
+    el.textContent = value === '' || value === undefined ? '–' : value;
+    el.title = el.textContent; // full value on hover when truncated
+  }
 }
 
 // SETTINGS frame (type 0x01) layout, offsets from the start of the frame
@@ -355,28 +469,116 @@ function decodeSettings(frame) {
 
 function renderSettings(s) {
   document.getElementById('settingsCard').style.display = '';
-  let text =
-    `Cell count: ${s.cellCount}  Nominal capacity: ${s.nominalCapacity.toFixed(1)} Ah\n` +
-    `Cell UVP: ${s.cellUVP.toFixed(3)} V (recovery ${s.cellUVPR.toFixed(3)} V)  Cell OVP: ${s.cellOVP.toFixed(3)} V (recovery ${s.cellOVPR.toFixed(3)} V)\n` +
-    `Balance trigger: ${(s.balanceTriggerVoltage * 1000).toFixed(0)} mV  Start balance voltage: ${s.startBalanceVoltage.toFixed(3)} V  Max balance current: ${s.maxBalanceCurrent.toFixed(3)} A\n` +
-    `Charge OTP: ${s.chargeOTP.toFixed(1)}°C (recovery ${s.chargeOTPRecovery.toFixed(1)}°C)  Discharge OTP: ${s.dischargeOTP.toFixed(1)}°C (recovery ${s.dischargeOTPRecovery.toFixed(1)}°C)\n` +
-    `Charge UTP: ${s.chargeUTP.toFixed(1)}°C (recovery ${s.chargeUTPRecovery.toFixed(1)}°C)  MOS OTP: ${s.mosOTP.toFixed(1)}°C (recovery ${s.mosOTPRecovery.toFixed(1)}°C)\n` +
-    `Charging: ${s.chargingEnabled ? 'on' : 'off'}  Discharging: ${s.dischargingEnabled ? 'on' : 'off'}  Balancer: ${s.balancerEnabled ? 'on' : 'off'}\n` +
-    `Smart sleep voltage: ${s.smartSleepVoltage.toFixed(3)} V  SOC 100%: ${s.soc100Voltage.toFixed(3)} V  SOC 0%: ${s.soc0Voltage.toFixed(3)} V\n` +
-    `Request charge voltage: ${s.cellRequestChargeVoltage.toFixed(3)} V  Request float voltage: ${s.cellRequestFloatVoltage.toFixed(3)} V  Power off voltage: ${s.powerOffVoltage.toFixed(3)} V\n` +
-    `Max charge current: ${s.maxChargeCurrent.toFixed(3)} A (OCP delay ${s.chargeOcpDelay}s, recovery ${s.chargeOcpRecoveryTime}s)\n` +
-    `Max discharge current: ${s.maxDischargeCurrent.toFixed(3)} A (OCP delay ${s.dischargeOcpDelay}s)\n` +
-    `Short circuit protection: delay ${s.shortCircuitProtectionDelay} µs (recovery ${s.shortCircuitProtectionRecoveryTime}s)`;
+  const is32S = s.deviceAddress !== undefined; // extended fields only decoded on JK02_32S
+  const v = (x) => `${x.toFixed(3)} V`;
+  const a = (x) => `${x.toFixed(3)} A`;
+  const c = (x) => `${x.toFixed(1)} °C`;
 
-  if (s.deviceAddress !== undefined) {
-    text +=
-      `\nDevice address: ${s.deviceAddress}  Precharge time: ${s.prechargeTime}s  Smart sleep delay: ${s.smartSleepDelay}\n` +
-      `Heating: ${s.heatingEnabled ? 'on' : 'off'} (start ${s.heatingStartTemperature}°C, stop ${s.heatingStopTemperature}°C)  Port: ${s.portMode}\n` +
-      `Discharge UTP: ${s.dischargeUTP}°C (recovery ${s.dischargeUTPRecovery}°C)\n` +
-      `Display always on: ${s.displayAlwaysOn ? 'yes' : 'no'}  Special charger: ${s.specialCharger ? 'yes' : 'no'}  Smart sleep: ${s.smartSleepEnabled ? 'on' : 'off'}  GPS heartbeat: ${s.gpsHeartbeat ? 'yes' : 'no'}`;
+  const switches = [
+    ['Charging', s.chargingEnabled],
+    ['Discharging', s.dischargingEnabled],
+    ['Balancer', s.balancerEnabled],
+  ];
+  if (is32S) {
+    switches.push(
+      ['Heating', s.heatingEnabled],
+      ['Smart sleep', s.smartSleepEnabled],
+      ['Display always on', s.displayAlwaysOn],
+      ['Special charger', s.specialCharger],
+      ['GPS heartbeat', s.gpsHeartbeat],
+    );
   }
 
-  document.getElementById('settingsOutput').textContent = text;
+  const voltageRows = [
+    ['Cell UVP', v(s.cellUVP), v(s.cellUVPR)],
+    ['Cell OVP', v(s.cellOVP), v(s.cellOVPR)],
+    ['Power off', v(s.powerOffVoltage), ''],
+    ['Smart sleep', v(s.smartSleepVoltage), ''],
+    ['SOC 100%', v(s.soc100Voltage), ''],
+    ['SOC 0%', v(s.soc0Voltage), ''],
+    ['Request charge', v(s.cellRequestChargeVoltage), ''],
+    ['Request float', v(s.cellRequestFloatVoltage), ''],
+  ];
+
+  const currentRows = [
+    ['Charge OCP', a(s.maxChargeCurrent), `${s.chargeOcpDelay} s`, `${s.chargeOcpRecoveryTime} s`],
+    ['Discharge OCP', a(s.maxDischargeCurrent), `${s.dischargeOcpDelay} s`, ''],
+    ['Short circuit', '', `${s.shortCircuitProtectionDelay} µs`, `${s.shortCircuitProtectionRecoveryTime} s`],
+  ];
+
+  const temperatureRows = [
+    ['Charge OTP', c(s.chargeOTP), c(s.chargeOTPRecovery)],
+    ['Discharge OTP', c(s.dischargeOTP), c(s.dischargeOTPRecovery)],
+    ['Charge UTP', c(s.chargeUTP), c(s.chargeUTPRecovery)],
+  ];
+  if (is32S) temperatureRows.push(['Discharge UTP', c(s.dischargeUTP), c(s.dischargeUTPRecovery)]);
+  temperatureRows.push(['MOS OTP', c(s.mosOTP), c(s.mosOTPRecovery)]);
+  if (is32S) temperatureRows.push(['Heating (start / stop)', c(s.heatingStartTemperature), c(s.heatingStopTemperature)]);
+
+  const balancingRows = [
+    ['Trigger delta', `${(s.balanceTriggerVoltage * 1000).toFixed(0)} mV`],
+    ['Start voltage', v(s.startBalanceVoltage)],
+    ['Max current', a(s.maxBalanceCurrent)],
+  ];
+
+  const generalRows = [
+    ['Cell count', `${s.cellCount}`],
+    ['Nominal capacity', `${s.nominalCapacity.toFixed(1)} Ah`],
+  ];
+  if (is32S) {
+    generalRows.push(
+      ['Device address', `${s.deviceAddress}`],
+      ['Port mode', s.portMode],
+      ['Precharge time', `${s.prechargeTime} s`],
+      ['Smart sleep delay', `${s.smartSleepDelay}`],
+    );
+  }
+
+  document.getElementById('settingsOutput').innerHTML =
+    `<div class="section-label">Switches</div>` +
+    `<div class="d-flex flex-wrap gap-1 mb-3">${switches.map(([label, on]) => switchPill(label, on)).join('')}</div>` +
+    `<div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-3">` +
+    settingsColumn(settingsTable('Voltage protection', ['', 'Trigger', 'Recovery'], voltageRows)) +
+    settingsColumn(
+      settingsTable('Current protection', ['', 'Limit', 'Delay', 'Recovery'], currentRows),
+      settingsTable('Balancing', null, balancingRows),
+    ) +
+    settingsColumn(
+      settingsTable('Temperature protection', ['', 'Trigger', 'Recovery'], temperatureRows),
+      settingsTable('General', null, generalRows),
+    ) +
+    `</div>`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+}
+
+function switchPill(label, on) {
+  return `<span class="badge rounded-pill ${on ? 'text-bg-success' : 'text-bg-secondary opacity-50'}">` +
+    `${escapeHtml(label)}: ${on ? 'on' : 'off'}</span>`;
+}
+
+// One grid column stacking one or more settings tables, so short groups can
+// share a column and keep the columns roughly equal in height.
+function settingsColumn(...tables) {
+  return `<div class="col d-flex flex-column gap-3">${tables.join('')}</div>`;
+}
+
+// Renders a titled settings table; `headers` is null for plain label/value
+// tables. Empty cells render as a dash so columns stay aligned.
+function settingsTable(title, headers, rows) {
+  const head = headers
+    ? `<thead><tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>`
+    : '';
+  const body = rows.map((row) =>
+    `<tr>${row.map((cell, i) => i === 0
+      ? `<td class="text-body-secondary">${escapeHtml(cell)}</td>`
+      : `<td class="fw-semibold">${cell === '' ? '<span class="text-body-tertiary">–</span>' : escapeHtml(cell)}</td>`
+    ).join('')}</tr>`
+  ).join('');
+  return `<div><div class="section-label">${escapeHtml(title)}</div>` +
+    `<table class="table table-sm settings-table">${head}<tbody>${body}</tbody></table></div>`;
 }
 
 // JK-BMS has two sibling frame layouts (see esphome-jk-bms/jk_bms_ble.cpp):
@@ -617,9 +819,51 @@ function updateCellChart(activeIndices, d) {
   chart.update();
 }
 
+const CURRENT_IDLE_THRESHOLD_A = 0.05; // below this, treat the pack as idle
+
+function renderPackSummary(d, diagnostics, minCellV, maxCellV) {
+  const set = (id, text) => { document.getElementById(id).textContent = text; };
+
+  const badge = document.getElementById('protocolBadge');
+  badge.textContent = `JK02_${d.use32S ? '32S' : '24S'}`;
+  badge.title = `Protocol fit error: 32S=${diagnostics.error32S.toFixed(3)}, 24S=${diagnostics.error24S.toFixed(3)}`;
+
+  set('sumPackVoltage', d.packVoltage.toFixed(2));
+  set('sumCurrent', d.current.toFixed(2));
+  set('sumPower', d.power.toFixed(0));
+  set('sumSoc', d.soc);
+
+  // JK-BMS reports charge current as positive, discharge as negative
+  const charging = d.current > CURRENT_IDLE_THRESHOLD_A;
+  const discharging = d.current < -CURRENT_IDLE_THRESHOLD_A;
+  const currentEl = document.getElementById('sumCurrent');
+  currentEl.classList.toggle('text-charge', charging);
+  currentEl.classList.toggle('text-discharge', discharging);
+  set('sumCurrentState', charging ? 'Charging' : discharging ? 'Discharging' : 'Idle');
+
+  set('sumMaxCell', maxCellV.toFixed(3));
+  set('sumMinCell', minCellV.toFixed(3));
+  set('sumAvgCell', d.avgCellVoltage.toFixed(3));
+  set('sumDelta', (d.cellVoltageDelta * 1000).toFixed(0));
+  set('sumBalanceCurrent', (d.balanceCurrent * 1000).toFixed(0));
+
+  set('sumT1', d.t1.toFixed(1));
+  set('sumT2', d.t2.toFixed(1));
+  set('sumMosTemp', d.mosTemp.toFixed(1));
+}
+
 function render(d, diagnostics) {
+  const protocolChanged = lastUse32S !== d.use32S;
   lastUse32S = d.use32S;
+  d.receivedAt = Date.now();
   lastLiveData = d;
+
+  // A SETTINGS frame that arrived before the first LIVE_DATA frame was decoded
+  // without knowing the protocol, so its 32S-only fields were skipped.
+  if (protocolChanged && lastSettingsFrame) {
+    lastSettingsData = decodeSettings(lastSettingsFrame);
+    renderSettings(lastSettingsData);
+  }
 
   // Only show slots that correspond to real cells (unused slots read ~0)
   const activeIndices = d.cells
@@ -634,11 +878,7 @@ function render(d, diagnostics) {
   const minCellV = Math.min(...activeVoltages);
   const maxCellV = Math.max(...activeVoltages);
 
-  document.getElementById('output').textContent =
-    `Detected protocol: JK02_${d.use32S ? '32S' : '24S'} (fit error 32S=${diagnostics.error32S.toFixed(3)} 24S=${diagnostics.error24S.toFixed(3)})\n` +
-    `Pack: ${d.packVoltage.toFixed(2)} V | Current: ${d.current.toFixed(2)} A | Power: ${d.power.toFixed(0)} W\n` +
-    `SOC: ${d.soc}% | Max cell: ${maxCellV.toFixed(3)} V | Min cell: ${minCellV.toFixed(3)} V | Avg cell: ${d.avgCellVoltage.toFixed(3)} V | Delta: ${(d.cellVoltageDelta * 1000).toFixed(0)} mV | Balance current: ${(d.balanceCurrent * 1000).toFixed(0)} mA\n` +
-    `Temp1: ${d.t1}°C  Temp2: ${d.t2}°C  MOS: ${d.mosTemp}°C`;
+  renderPackSummary(d, diagnostics, minCellV, maxCellV);
 
   sendStatusPayload();
 }
@@ -646,12 +886,19 @@ function render(d, diagnostics) {
 // Combines the latest decoded DEVICE_INFO/SETTINGS/LIVE_DATA frames into one
 // JSON object, grouped by frame type, with closely-related fields kept next
 // to each other (e.g. cellUVP right next to cellUVPR) for readability.
+// `timestamp` is when the live data was received from the BMS; `sentAt` is
+// when this request was made. Each section also carries its own receivedAt.
 function buildStatusPayload() {
-  const payload = { timestamp: new Date().toISOString() };
+  const iso = (ms) => new Date(ms).toISOString();
+  const payload = {
+    timestamp: iso(lastLiveData ? lastLiveData.receivedAt : Date.now()),
+    sentAt: iso(Date.now()),
+  };
 
   if (lastDeviceInfo) {
     const i = lastDeviceInfo;
     payload.deviceInfo = {
+      receivedAt: iso(i.receivedAt),
       bluetoothId: i.bluetoothId,
       bluetoothName: i.bluetoothName,
       model: i.model,
@@ -667,6 +914,7 @@ function buildStatusPayload() {
   if (lastSettingsData) {
     const s = lastSettingsData;
     const settings = {
+      receivedAt: iso(lastSettingsAt),
       cellCount: s.cellCount,
       nominalCapacity: s.nominalCapacity,
       cellUVP: s.cellUVP,
@@ -729,6 +977,7 @@ function buildStatusPayload() {
     const d = lastLiveData;
     const activeVoltages = d.cells.filter((v) => v > 0.5);
     payload.liveData = {
+      receivedAt: iso(d.receivedAt),
       protocol: d.use32S ? 'JK02_32S' : 'JK02_24S',
       packVoltage: d.packVoltage,
       current: d.current,
@@ -765,25 +1014,82 @@ function setRemoteSyncStatus(message, isError) {
   el.classList.toggle('text-body-secondary', !isError);
 }
 
-// Posts the combined status JSON to the user-provided URL, if any. Never
-// throws or shows a popup on failure; all outcomes are reflected in the
-// Remote Sync status area instead.
+const REMOTE_SYNC_TIMEOUT_MS = 10000;
+const REMOTE_SYNC_RESPONSE_PREVIEW_CHARS = 200;
+
+// Committed Remote Sync config. The form fields are only read when the user
+// switches sync on (and are locked while it's on), so half-typed URLs are
+// never used.
+const remoteSync = { enabled: false, url: '', intervalSeconds: 10, mode: 'cors' };
+
+// Chrome's Local Network Access lets an https page fetch http:// URLs on the
+// local network (after a permission prompt) only if the request declares the
+// target address space up front; otherwise it's blocked as mixed content.
+// Other browsers ignore the unknown fetch option.
+function getTargetAddressSpace(url) {
+  const host = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || /^127\./.test(host) || host === '::1') {
+    return 'loopback';
+  }
+  if (/^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+      /^169\.254\./.test(host) || /^f[cd][0-9a-f]{2}:/.test(host) || /^fe80:/.test(host) ||
+      /\.(local|lan|home\.arpa|internal)$/.test(host) || !host.includes('.')) {
+    return 'local';
+  }
+  return undefined;
+}
+
+function timeOfDay() {
+  return new Date().toLocaleTimeString();
+}
+
+// Posts the combined status JSON to the configured URL, if sync is on and the
+// minimum interval has passed. Never throws or shows a popup on failure; all
+// outcomes are reflected in the Remote Sync status area instead.
 async function sendStatusPayload() {
-  const url = document.getElementById('remoteSyncUrl').value.trim();
-  if (!url || !isValidHttpUrl(url)) return;
+  if (!remoteSync.enabled) return;
   if (remoteSyncInFlight) return; // avoid piling up overlapping requests
+  if (Date.now() - lastRemoteSyncAt < remoteSync.intervalSeconds * 1000) return;
 
   remoteSyncInFlight = true;
+  lastRemoteSyncAt = Date.now();
+  const simple = remoteSync.mode === 'simple';
+  const options = {
+    method: 'POST',
+    body: JSON.stringify(buildStatusPayload()),
+    signal: AbortSignal.timeout(REMOTE_SYNC_TIMEOUT_MS),
+  };
+  if (simple) {
+    // A text/plain no-cors POST is a "simple request": no CORS preflight, so
+    // servers without CORS headers still receive it, but the browser hides
+    // the response from us.
+    options.mode = 'no-cors';
+    options.headers = { 'Content-Type': 'text/plain' };
+  } else {
+    options.headers = { 'Content-Type': 'application/json' };
+  }
+  const targetAddressSpace = getTargetAddressSpace(remoteSync.url);
+  if (targetAddressSpace) options.targetAddressSpace = targetAddressSpace;
+
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildStatusPayload()),
-    });
-    const text = await response.text();
-    setRemoteSyncStatus(`HTTP ${response.status} ${response.statusText}${text ? ': ' + text : ''}`, !response.ok);
+    const response = await fetch(remoteSync.url, options);
+    if (simple) {
+      setRemoteSyncStatus(`[${timeOfDay()}] Sent (simple mode: the browser hides the server's response)`, false);
+    } else {
+      let text = (await response.text()).replace(/\s+/g, ' ').trim();
+      if (text.length > REMOTE_SYNC_RESPONSE_PREVIEW_CHARS) {
+        text = text.slice(0, REMOTE_SYNC_RESPONSE_PREVIEW_CHARS) + '…';
+      }
+      setRemoteSyncStatus(
+        `[${timeOfDay()}] HTTP ${response.status} ${response.statusText}${text ? ': ' + text : ''}`,
+        !response.ok,
+      );
+    }
   } catch (err) {
-    setRemoteSyncStatus(`Request failed: ${err.message}`, true);
+    const reason = err.name === 'TimeoutError'
+      ? `no response within ${REMOTE_SYNC_TIMEOUT_MS / 1000}s`
+      : `${err.message}${simple ? '' : ' (if the server lacks CORS headers, try Simple mode)'}`;
+    setRemoteSyncStatus(`[${timeOfDay()}] Request failed: ${reason}`, true);
   } finally {
     remoteSyncInFlight = false;
   }
@@ -798,6 +1104,20 @@ function setConnectedUi(connected) {
   document.getElementById('remoteSyncCard').style.display = display;
 }
 
+// 0x97 returns a DEVICE_INFO frame; 0x96 returns a SETTINGS frame followed
+// by LIVE_DATA (cell info) frames.
+async function requestDeviceInfoAndSettings() {
+  await sendCommand([0x97]); // request DEVICE_INFO
+  await new Promise((r) => setTimeout(r, 400));
+  await sendCommand([0x96]); // request SETTINGS + LIVE_DATA
+}
+
+function stopTimers() {
+  clearInterval(pollTimer);
+  clearInterval(watchdogTimer);
+  clearInterval(infoRefreshTimer);
+}
+
 async function setupConnection() {
   const server = await device.gatt.connect();
   const service = await server.getPrimaryService(SERVICE_UUID);
@@ -806,10 +1126,15 @@ async function setupConnection() {
   await characteristic.startNotifications();
   characteristic.addEventListener('characteristicvaluechanged', handleNotification);
 
-  await sendCommand([0x97]); // request DEVICE_INFO
-  await new Promise((r) => setTimeout(r, 400));
-  await sendCommand([0x96]); // request LIVE_DATA (cell info)
+  await requestDeviceInfoAndSettings();
   lastLiveDataAt = Date.now();
+
+  // Re-request DEVICE_INFO and SETTINGS periodically so uptime and any
+  // settings changed on the BMS stay current.
+  if (infoRefreshTimer) clearInterval(infoRefreshTimer);
+  infoRefreshTimer = setInterval(() => {
+    requestDeviceInfoAndSettings().catch((e) => showError(e.message));
+  }, INFO_REFRESH_INTERVAL_MS);
 
   // Some JK-BMS units free-stream LIVE_DATA on their own; only request it
   // ourselves if none has arrived recently, to avoid duplicate frames.
@@ -838,8 +1163,7 @@ async function setupConnection() {
 async function attemptReconnect() {
   if (reconnecting) return;
   reconnecting = true;
-  clearInterval(pollTimer);
-  clearInterval(watchdogTimer);
+  stopTimers();
 
   while (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
     reconnectAttempts++;
@@ -861,14 +1185,33 @@ async function attemptReconnect() {
   showError('Reconnection failed. Click Connect to try again.');
 }
 
+// Forgets everything decoded from the previous BMS so Remote Sync payloads and
+// the Device Info / Settings cards never mix data from two devices.
+function resetDeviceState() {
+  lastDeviceInfo = null;
+  lastSettingsData = null;
+  lastSettingsFrame = null;
+  lastSettingsAt = 0;
+  lastLiveData = null;
+  lastUse32S = null;
+  document.getElementById('deviceInfoCard').style.display = 'none';
+  document.getElementById('settingsCard').style.display = 'none';
+}
+
+function handleGattDisconnected(event) {
+  if (event.target !== device) return; // a previously used BMS, not the current one
+  console.log('Disconnected');
+  stopTimers();
+  if (remoteSync.enabled) setRemoteSyncStatus(`[${timeOfDay()}] Paused: BMS disconnected.`, false);
+  attemptReconnect();
+}
+
 function wireDeviceAndConnect(d) {
+  if (!device || device.id !== d.id) resetDeviceState();
   device = d;
-  device.addEventListener('gattserverdisconnected', () => {
-    console.log('Disconnected');
-    clearInterval(pollTimer);
-    clearInterval(watchdogTimer);
-    attemptReconnect();
-  });
+  // addEventListener ignores a duplicate (same object + same handler), so
+  // pressing Connect again for the same BMS doesn't start two reconnect loops.
+  device.addEventListener('gattserverdisconnected', handleGattDisconnected);
   return setupConnection();
 }
 
@@ -907,31 +1250,91 @@ document.getElementById('requestLiveData').addEventListener('click', () => {
   sendCommand([0x96]).catch((e) => showError(e.message));
 });
 
-// Persist the Remote Sync URL across page reloads (only while it's valid).
-const REMOTE_SYNC_URL_STORAGE_KEY = 'jkbmsRemoteSyncUrl';
+// Persist the Remote Sync config (URL, interval, mode, on/off) across page
+// reloads. It's only saved when sync is switched on or off, never while typing.
+const REMOTE_SYNC_STORAGE_KEY = 'jkbmsRemoteSync';
+const LEGACY_REMOTE_SYNC_URL_STORAGE_KEY = 'jkbmsRemoteSyncUrl';
 
-(function loadSavedRemoteSyncUrl() {
+function saveRemoteSyncConfig() {
   try {
-    const saved = localStorage.getItem(REMOTE_SYNC_URL_STORAGE_KEY);
-    if (saved && isValidHttpUrl(saved)) {
-      document.getElementById('remoteSyncUrl').value = saved;
+    localStorage.setItem(REMOTE_SYNC_STORAGE_KEY, JSON.stringify(remoteSync));
+    localStorage.removeItem(LEGACY_REMOTE_SYNC_URL_STORAGE_KEY);
+  } catch (err) {
+    console.warn('Could not save Remote Sync config', err);
+  }
+}
+
+function applyRemoteSyncUi() {
+  document.getElementById('remoteSyncEnabled').checked = remoteSync.enabled;
+  document.getElementById('remoteSyncEnabledLabel').textContent = remoteSync.enabled ? 'On' : 'Off';
+  for (const id of ['remoteSyncUrl', 'remoteSyncInterval', 'remoteSyncMode']) {
+    document.getElementById(id).disabled = remoteSync.enabled;
+  }
+}
+
+function setRemoteSyncEnabled(enabled) {
+  if (enabled) {
+    const url = document.getElementById('remoteSyncUrl').value.trim();
+    if (!isValidHttpUrl(url)) {
+      remoteSync.enabled = false;
+      applyRemoteSyncUi();
+      setRemoteSyncStatus('Enter a valid http:// or https:// URL before turning sync on.', true);
+      return;
+    }
+    Object.assign(remoteSync, {
+      enabled: true,
+      url,
+      intervalSeconds: Number(document.getElementById('remoteSyncInterval').value),
+      mode: document.getElementById('remoteSyncMode').value,
+    });
+    lastRemoteSyncAt = 0; // send on the next live frame
+
+    const isHttpFromHttps = location.protocol === 'https:' && new URL(url).protocol === 'http:';
+    if (isHttpFromHttps && !getTargetAddressSpace(url)) {
+      setRemoteSyncStatus(
+        'Warning: this page is served over https, so the browser will block plain http:// requests to a ' +
+        'public address. Use an https:// URL, or a local IP / *.local hostname.', true);
+    } else {
+      setRemoteSyncStatus('Sync on. Waiting for the next live data frame...', false);
+    }
+  } else {
+    remoteSync.enabled = false;
+    setRemoteSyncStatus('Sync off.', false);
+  }
+  applyRemoteSyncUi();
+  saveRemoteSyncConfig();
+}
+
+(function loadSavedRemoteSyncConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(REMOTE_SYNC_STORAGE_KEY) || 'null');
+    if (saved && isValidHttpUrl(saved.url)) {
+      remoteSync.url = saved.url;
+      remoteSync.enabled = !!saved.enabled;
+      if ([...document.getElementById('remoteSyncInterval').options].some((o) => Number(o.value) === saved.intervalSeconds)) {
+        remoteSync.intervalSeconds = saved.intervalSeconds;
+      }
+      if (saved.mode === 'cors' || saved.mode === 'simple') remoteSync.mode = saved.mode;
+    } else {
+      // Older versions saved only the URL and sent whenever it was valid, so
+      // keep sync on for users upgrading with a saved URL.
+      const legacyUrl = localStorage.getItem(LEGACY_REMOTE_SYNC_URL_STORAGE_KEY);
+      if (legacyUrl && isValidHttpUrl(legacyUrl)) {
+        remoteSync.url = legacyUrl;
+        remoteSync.enabled = true;
+      }
     }
   } catch (err) {
-    console.warn('Could not read saved Remote Sync URL', err);
+    console.warn('Could not read saved Remote Sync config', err);
   }
+  document.getElementById('remoteSyncUrl').value = remoteSync.url;
+  document.getElementById('remoteSyncInterval').value = String(remoteSync.intervalSeconds);
+  document.getElementById('remoteSyncMode').value = remoteSync.mode;
+  applyRemoteSyncUi();
 })();
 
-document.getElementById('remoteSyncUrl').addEventListener('input', (e) => {
-  const value = e.target.value.trim();
-  try {
-    if (value && isValidHttpUrl(value)) {
-      localStorage.setItem(REMOTE_SYNC_URL_STORAGE_KEY, value);
-    } else {
-      localStorage.removeItem(REMOTE_SYNC_URL_STORAGE_KEY);
-    }
-  } catch (err) {
-    console.warn('Could not save Remote Sync URL', err);
-  }
+document.getElementById('remoteSyncEnabled').addEventListener('change', (e) => {
+  setRemoteSyncEnabled(e.target.checked);
 });
 
 // Auto-connect on page load, but only to a device the user has already
