@@ -32,9 +32,10 @@ want to:
   the full SETTINGS frame (protection thresholds, balance config, OCP/OTP/
   UTP with recovery values, etc.) straight from the browser.
 - **Share a live view with someone else** in seconds — the Remote Sync
-  feature can `POST` a JSON snapshot to any webhook URL (e.g. a spreadsheet,
-  a Discord webhook, or your own logging endpoint) without writing a
-  dedicated integration.
+  feature can `POST` a JSON snapshot to any webhook URL (e.g. a Home
+  Assistant or Node-RED webhook on your local network, a Google Apps Script
+  that appends to a spreadsheet, or your own logging endpoint) without
+  writing a dedicated integration.
 
 Because it's a static page with everything vendored locally, it also works
 **completely offline** once loaded, and can be self-hosted, forked, or run
@@ -49,8 +50,8 @@ see [Comparison with other tools](#comparison-with-other-tools).
 - **Pack Status** — power, SOC, and cell-voltage-delta gauges.
 - **Cell Voltages** — a live bar chart of every active cell, with the
   min/max cells highlighted.
-- **Pack Summary** — pack voltage/current/power, temperatures, and balance
-  current as text.
+- **Pack Summary** — pack voltage/current/power, SOC, min/max/average cell
+  voltage, delta, balance current, and temperatures as at-a-glance tiles.
 - **Device Info** — model, hardware/software version, serial number,
   manufacturing date, uptime, power-on count, and the browser-assigned
   Bluetooth identifier (`device.id`/`device.name` — Web Bluetooth
@@ -63,7 +64,10 @@ see [Comparison with other tools](#comparison-with-other-tools).
   and (on JK02_32S packs) extended fields like device address, precharge
   time, and heating settings.
 - **Remote Sync** — optionally POST a combined JSON snapshot of Device
-  Info, Settings, and Live Data to a URL of your choice on every refresh.
+  Info, Settings, and Live Data to a URL of your choice, at a configurable
+  interval — including to local-network addresses.
+- Device Info and Settings are re-requested every 30 seconds, so uptime
+  and any settings changed on the BMS stay current.
 - Auto-reconnect with exponential backoff if the connection drops.
 - Only requests live data if the BMS hasn't already streamed it on its
   own in the last 5 seconds, to avoid duplicate frames.
@@ -82,14 +86,53 @@ so the page works fully offline — no CDN or internet connection required.
 
 ### Remote Sync (webhook)
 
-Enter a URL in the **Remote Sync** card's textbox to have the app `POST` a
-JSON payload — `{ deviceInfo, settings, liveData, timestamp }` — to that
-URL every time the live data refreshes. The response (or any request
-error) is shown in the status area below the textbox; nothing pops up as
-an alert. Leave the field empty (or enter an invalid URL) to disable
-sending — no request is made and no JSON is even built in that case. The
-URL is saved in the browser's `localStorage` and restored automatically
-the next time you load the page.
+Enter a URL in the **Remote Sync** card, pick how often to send, and flip
+the **On/Off** switch in the card header. While sync is on, the app
+`POST`s a JSON payload — `{ timestamp, sentAt, deviceInfo, settings,
+liveData }` — to that URL when new live data arrives, at most once per the
+chosen interval (every frame, 5 s, 10 s, 30 s, 1 min, or 5 min).
+`timestamp` is when the live data was received from the BMS, `sentAt` is
+when the request was made, and each section has its own `receivedAt`.
+
+The URL and options are locked while sync is on, so a half-typed URL is
+never used; switch it off to edit them. The latest result (timestamped
+HTTP status plus the first 200 characters of the response, or the error) is
+shown below the options; nothing pops up as an alert. Requests time out
+after 10 seconds, and sync pauses while the BMS is disconnected. The
+configuration, including the on/off state, is saved in the browser's
+`localStorage` and restored the next time you load the page. If your
+webhook URL contains a secret token, note that it's stored there in plain
+text.
+
+**Request mode**
+
+- **JSON** (default) sends `Content-Type: application/json`. Browsers
+  first send a CORS preflight (`OPTIONS`) for this, so the server must
+  reply with `Access-Control-Allow-Origin` (and allow the `Content-Type`
+  header). In return you see the server's real HTTP status and response.
+- **Simple** sends the same JSON as `text/plain` in `no-cors` mode, which
+  needs no preflight and no CORS headers — use it for endpoints that don't
+  support CORS, such as Home Assistant webhooks, Node-RED `http in` nodes,
+  or Google Apps Script web apps. The trade-off is that the browser hides
+  the response, so the status only shows that the request was sent, and
+  your server has to parse the body as JSON itself.
+
+**Sending to a local IP from the hosted (https) site**
+
+Browsers normally block requests from an `https://` page to a plain
+`http://` URL (mixed content). For local addresses — private IPs
+(`192.168.x.x`, `10.x.x.x`, `172.16–31.x.x`), `localhost`, single-label
+hostnames, and `*.local` / `*.lan` / `*.home.arpa` names — the app declares
+the request as local-network traffic, which Chrome/Edge (Local Network
+Access) allow after a one-time **"Allow access to devices on your local
+network"** prompt. If you deny it, reset it from the site permissions
+(padlock icon). Other browsers don't support Web Bluetooth anyway. If a
+local hostname uses a regular domain (e.g. `nas.example.com`) the app
+can't tell it's local, so either use the IP or an `https://` URL.
+
+Discord and Slack webhooks expect their own message format (e.g. a
+`content` field), so they won't accept this payload directly; put a small
+relay (e.g. Node-RED or a Google Apps Script) in between.
 
 ### Auto-reconnect on page reload
 
