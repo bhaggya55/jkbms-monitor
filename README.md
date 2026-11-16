@@ -51,8 +51,9 @@ see [Comparison with other tools](#comparison-with-other-tools).
 ## Features
 
 - **Pack Status** — power, SOC, and cell-voltage-delta gauges.
-- **Cell Voltages** — a live bar chart of every active cell, with the
-  min/max cells highlighted.
+- **Cell Voltages and Wire Resistances** — a live bar chart of every active cell, with the
+  min/max cells highlighted, plus each cell's resistance as a line on a
+  right-hand 0–200 mΩ axis.
 - **BMS Status** — the actual charge/discharge MOSFET states (as opposed to
   the configured switches), precharge, balancing, charge stage, heating,
   charger, PCL module, dry contacts, emergency mode, smart sleep countdown,
@@ -67,7 +68,19 @@ see [Comparison with other tools](#comparison-with-other-tools).
   power-on count, battery type, log entry count, UART/CAN protocols, and
   the browser-assigned Bluetooth identifier (`device.id`/`device.name` —
   Web Bluetooth deliberately hides the real BLE MAC address from web pages,
-  so this is the closest available identifier).
+  so this is the closest available identifier). Two buttons save the
+  BMS's stored logs as CSV files:
+  - **Download system log** — the most recent events (boots, protection
+    trips and releases, switch changes, …; the last 50 on the BMS this was
+    tested with), newest first. The BMS only records each event's run
+    time, so the CSV's wall-clock time is an estimate.
+  - **Download detailed log** — the much longer event history, oldest
+    first, each event with a snapshot of the pack at that moment: MOSFET
+    and balancer state, highest/lowest cell and their voltages, pack
+    voltage, current, remaining/full capacity, and temperatures. Takes
+    about 15 seconds. Times come from the BMS's own clock, which is set
+    whenever the official JK app connects, and are shown in your
+    browser's time zone. Heater status and current are not included.
 - **Settings** — nearly every field from the BMS's SETTINGS frame:
   voltage protection thresholds (UVP/OVP with recovery), balance settings,
   charge/discharge current limits with OCP delay/recovery, over/under
@@ -89,7 +102,8 @@ see [Comparison with other tools](#comparison-with-other-tools).
 Open [index.html](index.html) in a Chromium-based browser
 (Chrome or Edge) that supports the Web Bluetooth API, then click **Connect
 to JK-BMS** and select your BMS from the device picker. The Pack Status,
-Cell Voltages, Pack Summary, and Remote Sync cards appear once connected
+Cell Voltages and Wire Resistances, Pack Summary, and Remote Sync cards
+appear once connected
 and hide again on disconnect; Device Info and Settings appear as soon as
 the BMS reports them.
 

@@ -71,7 +71,7 @@
     </div>
 
     <div id="cellVoltagesCard" class="card mb-3" style="display:none">
-      <div class="card-header">Cell Voltages</div>
+      <div class="card-header">Cell Voltages and Wire Resistances</div>
       <div class="card-body">
         <div id="cellChartWrap">
           <canvas id="cellChart"></canvas>
@@ -163,6 +163,11 @@
               <div class="col-12"><div class="kv-label">UART3 protocol</div><div id="infoUart3Protocol" class="kv-value"></div></div>
               <div class="col-12"><div class="kv-label">CAN protocol</div><div id="infoCanProtocol" class="kv-value"></div></div>
             </div>
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+              <button id="downloadSystemLog" class="btn btn-sm btn-outline-secondary">Download system log</button>
+              <button id="downloadDetailLog" class="btn btn-sm btn-outline-secondary">Download detailed log</button>
+            </div>
+            <div id="logDownloadStatus" class="small text-body-secondary mt-2"></div>
           </div>
         </div>
       </div>
@@ -266,7 +271,9 @@ let lastLiveData = null;
 let remoteSyncInFlight = false;
 let lastRemoteSyncAt = 0;
 
-const FRAME_TYPE_NAMES = { 0x01: 'SETTINGS', 0x02: 'LIVE_DATA', 0x03: 'DEVICE_INFO' };
+const FRAME_TYPE_NAMES = {
+  0x01: 'SETTINGS', 0x02: 'LIVE_DATA', 0x03: 'DEVICE_INFO', 0x05: 'SYSTEM_LOG', 0x06: 'DETAIL_LOG',
+};
 
 function showError(message) {
   document.getElementById('error').textContent = message ? `Error: ${message}` : '';
@@ -381,6 +388,14 @@ function processFrame(frame) {
     } catch (err) {
       console.error(err);
     }
+  } else if (frame[4] === 0x05) { // 0x05 = SYSTEM_LOG, only sent in reply to a request
+    if (pendingSystemLog) {
+      clearTimeout(pendingSystemLog.timer);
+      pendingSystemLog.resolve(frame);
+      pendingSystemLog = null;
+    }
+  } else if (frame[4] === 0x06) { // 0x06 = DETAIL_LOG, a run of these is sent in reply to a request
+    handleDetailLogFrame(frame);
   }
 }
 
@@ -495,6 +510,270 @@ function renderDeviceInfo(d) {
 function currentUptimeSeconds(deviceInfo) {
   return lastLiveData ? lastLiveData.runtimeSeconds : deviceInfo.uptimeSeconds;
 }
+
+// System log (the "logbook" of events such as boots and protection trips).
+// Command 0xA1 makes the BMS reply with a single frame of type 0x05 (see
+// decode_logbook_ in syssi/esphome-jk-bms):
+//  6-9 total number of events ever logged (u32), then 5-byte entries from
+//  offset 11: BMS run time in seconds (u32) + event code (u8).
+// The BMS only keeps the most recent events (50 on the BMS this was checked
+// against, in a ring: unused slots at the end of the frame are zero).
+const SYSTEM_LOG_TIMEOUT_MS = 5000;
+const SYSTEM_LOG_ENTRY_OFFSET = 11;
+const SYSTEM_LOG_ENTRY_SIZE = 5;
+const SYSTEM_LOG_SLOTS = Math.floor((FRAME_LENGTH - 1 - SYSTEM_LOG_ENTRY_OFFSET) / SYSTEM_LOG_ENTRY_SIZE);
+
+// Event names by code, starting at 0x01 (LOGBOOK_CODES in esphome-jk-bms)
+const SYSTEM_LOG_EVENT_NAMES = [
+  'Boot', 'Shutdown', 'APP close charge', 'APP open charge', 'APP close discharge', 'APP open discharge',
+  'Remote close charge', 'Remote open charge', 'Remote close discharge', 'Remote open discharge',
+  'MOS over temperature protection', 'MOS over-temperature protection is released',
+  'Abnormal current sensor', 'Abnormal release of current sensor',
+  'Abnormal coprocessor communication', 'Abnormal cancellation of coprocessor communication',
+  'Cell overcharge protection', 'Cell overcharge protection is released',
+  'Battery overcharge protection', 'Battery overcharge protection is released',
+  'Charge overcurrent protection', 'Charge overcurrent protection is released',
+  'Charge short circuit protection', 'Charge short circuit protection is released',
+  'Charge over temperature protection', 'Charge over temperature protection is released',
+  'Charge low temperature protection', 'Charge low temperature protection is released',
+  'Cell undervoltage protection', 'Cell undervoltage protection is released',
+  'Battery undervoltage protection', 'Battery undervoltage protection is released',
+  'Discharge overcurrent protection', 'Discharge overcurrent protection is released',
+  'Discharge short circuit protection', 'Discharge short circuit protection released',
+  'Discharge over temperature protection', 'Discharge over-temperature protection is released',
+  'Reset Watch-Dog', 'Discharge level 2 short circuit protection',
+  'Manually enable the emergency mode', 'Manually turn off the emergency mode',
+  'Turn off the emergency mode automatically', 'APP to turn it off', 'Button to turn it off',
+  'Discharge On Failed', 'RS485 power off', 'CAN charge off', 'CAN charge on', 'CAN discharge off',
+  'CAN discharge on', 'RS485 charge off', 'RS485 charge on', 'RS485 discharge off', 'RS485 discharge on',
+  'Enter sleep', 'Charge MOS abnormal', 'Discharge MOS abnormal', 'Time calibration', 'Cells Count Incorrect',
+  'Button Emergency On', 'Button Emergency Off', 'Button Forced Heating', 'Discharge OCP II', 'Discharge OCP III',
+  'SCP Release Failed', 'Factory setting LION', 'Factory setting LFP', 'Factory setting LTO',
+  'Remote Emergency On', 'Remote Emergency Off',
+  'Discharge under temperature protection', 'Discharge under temperature protection Release',
+];
+
+function systemLogEventName(code) {
+  const cell = (first) => String(code - first + 1).padStart(2, '0');
+  if (code >= 0x64 && code <= 0x83) return `Cell ${cell(0x64)} over charge protection`;
+  if (code >= 0xc8 && code <= 0xe7) return `Cell ${cell(0xc8)} over discharge protection`;
+  return SYSTEM_LOG_EVENT_NAMES[code - 1] || 'Unknown';
+}
+
+let pendingSystemLog = null; // { resolve, timer } while a 0xA1 request is waiting for its frame
+
+function requestSystemLog() {
+  return new Promise((resolve, reject) => {
+    const fail = (err) => {
+      clearTimeout(timer);
+      pendingSystemLog = null;
+      reject(err);
+    };
+    const timer = setTimeout(
+      () => fail(new Error('the BMS did not reply (this model or firmware may not support it)')),
+      SYSTEM_LOG_TIMEOUT_MS);
+    pendingSystemLog = { resolve, timer };
+    sendCommand([0xa1]).catch(fail);
+  });
+}
+
+// Returns the logged events, newest first. While the log has never filled up,
+// the events are the first `totalCount` slots in the order they happened
+// (anything after them is stale). Once it has wrapped, the oldest event can
+// be in any slot, so order by run time instead of by slot.
+function decodeSystemLog(frame) {
+  const view = new DataView(frame.buffer);
+  const totalCount = view.getUint32(6, true);
+  const wrapped = totalCount > SYSTEM_LOG_SLOTS;
+  const entries = [];
+  for (let i = 0; i < Math.min(totalCount, SYSTEM_LOG_SLOTS); i++) {
+    const offset = SYSTEM_LOG_ENTRY_OFFSET + i * SYSTEM_LOG_ENTRY_SIZE;
+    const code = frame[offset + 4];
+    if (code !== 0) entries.push({ runtimeSeconds: view.getUint32(offset, true), code });
+  }
+  if (wrapped) entries.sort((a, b) => b.runtimeSeconds - a.runtimeSeconds);
+  else entries.reverse();
+  return { totalCount, entries };
+}
+
+function formatLocalDateTime(date, dateSep = '-', sep = ' ', timeSep = ':') {
+  const p = (n) => String(n).padStart(2, '0');
+  return [date.getFullYear(), p(date.getMonth() + 1), p(date.getDate())].join(dateSep) + sep
+    + [p(date.getHours()), p(date.getMinutes()), p(date.getSeconds())].join(timeSep);
+}
+
+// The log only stores each event's BMS run time, so its wall-clock time is
+// estimated from how long ago that was by the BMS's current run time. It is
+// left blank for events stamped later than the current run time.
+function systemLogCsv(log) {
+  const now = Date.now();
+  const bmsRuntimeNow = lastDeviceInfo ? currentUptimeSeconds(lastDeviceInfo) : null;
+  const rows = ['Entry,Estimated time,BMS run time (s),Code,Event'];
+  log.entries.forEach((e, i) => {
+    const secondsAgo = bmsRuntimeNow === null ? -1 : bmsRuntimeNow - e.runtimeSeconds;
+    const estimated = secondsAgo < 0 ? '' : formatLocalDateTime(new Date(now - secondsAgo * 1000));
+    const code = `0x${e.code.toString(16).toUpperCase().padStart(2, '0')}`;
+    rows.push([i + 1, estimated, e.runtimeSeconds, code, systemLogEventName(e.code)].join(','));
+  });
+  return rows.join('\r\n') + '\r\n';
+}
+
+function downloadTextFile(filename, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Detailed log: the same events as the system log, but many more of them and
+// each with a snapshot of the pack at that moment. Worked out from a capture
+// of the official app exporting it from a JK_B2A20S20P (firmware 11.54).
+// Command 0xA7 makes the BMS send the whole log,
+// oldest record first, as a run of type 0x06 frames (with LIVE_DATA frames
+// still arriving in between):
+//  6-7 index of the frame's first record (u16), 8 number of records in the
+//  frame (12, fewer in the last one), then 24-byte records from offset 9:
+//   0-3 time in seconds since 2020-01-01 00:00 UTC+8 (u32, as set by the
+//   official app's "time calibration"), 4 event code (same codes as the
+//   system log), 5 status bits (1 charge, 2 discharge, 4 balancer on),
+//   6/7 zero-based number of the highest/lowest cell, 8-9/10-11 their
+//   voltages (mV), 12-13 pack voltage (0.01 V), 14-15 current (i16, 0.1 A),
+//   16-17/18-19 remaining/full charge capacity (0.1 Ah), 20/21/22
+//   max/min/MOSFET temperature (i8, °C).
+//  Byte 23 (heating current) and the heating status bit are not decoded:
+//  that BMS has no heater, so the capture could not confirm them.
+const DETAIL_LOG_IDLE_TIMEOUT_MS = 3000; // frames normally arrive ~150 ms apart
+const DETAIL_LOG_RECORD_OFFSET = 9;
+const DETAIL_LOG_RECORD_SIZE = 24;
+const DETAIL_LOG_RECORDS_PER_FRAME = 12;
+const DETAIL_LOG_EPOCH_MS = Date.UTC(2019, 11, 31, 16); // 2020-01-01 00:00 UTC+8
+
+let pendingDetailLog = null; // { records, resolve, reject, onProgress, timer } while a 0xA7 transfer is running
+
+function decodeDetailLogRecord(view, offset) {
+  const status = view.getUint8(offset + 5);
+  return {
+    time: new Date(DETAIL_LOG_EPOCH_MS + view.getUint32(offset, true) * 1000),
+    code: view.getUint8(offset + 4),
+    charging: !!(status & 1),
+    discharging: !!(status & 2),
+    balancing: !!(status & 4),
+    maxCell: view.getUint8(offset + 6) + 1,
+    minCell: view.getUint8(offset + 7) + 1,
+    maxCellVoltage: view.getUint16(offset + 8, true) / 1000,
+    minCellVoltage: view.getUint16(offset + 10, true) / 1000,
+    packVoltage: view.getUint16(offset + 12, true) / 100,
+    current: view.getInt16(offset + 14, true) / 10,
+    remainingCapacity: view.getUint16(offset + 16, true) / 10,
+    fullChargeCapacity: view.getUint16(offset + 18, true) / 10,
+    maxTemp: view.getInt8(offset + 20),
+    minTemp: view.getInt8(offset + 21),
+    mosTemp: view.getInt8(offset + 22),
+  };
+}
+
+// The BMS doesn't say how many records it will send. The transfer is over
+// when a frame arrives that isn't full, or (if the last frame happened to be
+// full) when the BMS stops sending; that second case is indistinguishable
+// from a stalled transfer, so it is reported as possibly incomplete.
+function finishDetailLog(error, complete) {
+  const p = pendingDetailLog;
+  pendingDetailLog = null;
+  clearTimeout(p.timer);
+  if (error) p.reject(error);
+  else p.resolve({ records: p.records, complete });
+}
+
+function armDetailLogTimeout() {
+  const p = pendingDetailLog;
+  clearTimeout(p.timer);
+  p.timer = setTimeout(() => {
+    if (p.records.length) finishDetailLog(null, false);
+    else finishDetailLog(new Error('the BMS did not reply (this model or firmware may not support it)'));
+  }, DETAIL_LOG_IDLE_TIMEOUT_MS);
+}
+
+function handleDetailLogFrame(frame) {
+  const p = pendingDetailLog;
+  if (!p) return;
+  const view = new DataView(frame.buffer);
+  const firstIndex = view.getUint16(6, true);
+  const count = frame[8];
+  if (firstIndex !== p.records.length || count > DETAIL_LOG_RECORDS_PER_FRAME) {
+    finishDetailLog(new Error('part of the log was lost or garbled in transfer, please try again'));
+    return;
+  }
+  for (let i = 0; i < count; i++) {
+    p.records.push(decodeDetailLogRecord(view, DETAIL_LOG_RECORD_OFFSET + i * DETAIL_LOG_RECORD_SIZE));
+  }
+  p.onProgress(p.records.length);
+  if (count < DETAIL_LOG_RECORDS_PER_FRAME) finishDetailLog(null, true);
+  else armDetailLogTimeout();
+}
+
+function requestDetailLog(onProgress) {
+  return new Promise((resolve, reject) => {
+    pendingDetailLog = { records: [], resolve, reject, onProgress, timer: null };
+    armDetailLogTimeout();
+    sendCommand([0xa7]).catch((err) => { if (pendingDetailLog) finishDetailLog(err); });
+  });
+}
+
+function detailLogCsv(records) {
+  const onOff = (v) => (v ? 'ON' : 'OFF');
+  const rows = ['Time,Code,Event,Charge,Discharge,Balance,Max cell,Min cell,Max cell voltage (V),'
+    + 'Min cell voltage (V),Battery voltage (V),Battery current (A),Remaining capacity (Ah),'
+    + 'Full charge capacity (Ah),Max temp (C),Min temp (C),MOS temp (C)'];
+  for (const r of records) {
+    rows.push([
+      formatLocalDateTime(r.time), `0x${r.code.toString(16).toUpperCase().padStart(2, '0')}`,
+      systemLogEventName(r.code), onOff(r.charging), onOff(r.discharging), onOff(r.balancing),
+      r.maxCell, r.minCell, r.maxCellVoltage.toFixed(3), r.minCellVoltage.toFixed(3),
+      r.packVoltage.toFixed(2), r.current.toFixed(1), r.remainingCapacity.toFixed(1),
+      r.fullChargeCapacity.toFixed(1), r.maxTemp, r.minTemp, r.mosTemp,
+    ].join(','));
+  }
+  return rows.join('\r\n') + '\r\n';
+}
+
+const logDownloadButtons = ['downloadSystemLog', 'downloadDetailLog'].map((id) => document.getElementById(id));
+const logDownloadStatus = document.getElementById('logDownloadStatus');
+
+function downloadLogCsv(kind, csv) {
+  const serial = ((lastDeviceInfo && lastDeviceInfo.serialNumber) || 'bms').replace(/[^A-Za-z0-9_-]/g, '');
+  downloadTextFile(`jkbms-${kind}-${serial}-${formatLocalDateTime(new Date(), '', '-', '')}.csv`, csv, 'text/csv');
+}
+
+// Runs one log download at a time; `task` resolves to the message to show.
+async function runLogDownload(task) {
+  logDownloadButtons.forEach((b) => { b.disabled = true; });
+  logDownloadStatus.textContent = 'Requesting…';
+  try {
+    logDownloadStatus.textContent = await task();
+  } catch (err) {
+    console.error(err);
+    logDownloadStatus.textContent = `Failed: ${err.message}`;
+  } finally {
+    logDownloadButtons.forEach((b) => { b.disabled = false; });
+  }
+}
+
+document.getElementById('downloadSystemLog').addEventListener('click', () => runLogDownload(async () => {
+  const log = decodeSystemLog(await requestSystemLog());
+  downloadLogCsv('system-log', systemLogCsv(log));
+  return `Downloaded the last ${log.entries.length} of ${log.totalCount} logged events.`;
+}));
+
+document.getElementById('downloadDetailLog').addEventListener('click', () => runLogDownload(async () => {
+  const log = await requestDetailLog((n) => { logDownloadStatus.textContent = `Receiving… ${n} records`; });
+  downloadLogCsv('detail-log', detailLogCsv(log.records));
+  return `Downloaded ${log.records.length} records.`
+    + (log.complete ? '' : ' The BMS stopped sending without marking the end, so the log may be incomplete.');
+}));
 
 const BATTERY_TYPE_NAMES = ['LFP', 'Li-ion', 'LTO'];
 
@@ -854,6 +1133,10 @@ const CELL_BAR_COLOR_MIN = '#dc3545';
 const CELL_BAR_COLOR_MAX = '#fd7e14';
 const CELL_VOLTAGE_AXIS_MIN = 3.115;
 const CELL_VOLTAGE_AXIS_MAX = 3.65;
+const CELL_RESISTANCE_COLOR = '#6f42c1';
+const CELL_RESISTANCE_AXIS_MIN = 0; // mΩ
+const CELL_RESISTANCE_AXIS_MAX = 200; // mΩ
+const CELL_RESISTANCE_NA = 65.535; // raw 0xFFFF: the BMS has no reading for this cell
 let cellChart;
 
 // Half-doughnut "gauge" built out of a Chart.js doughnut chart (no extra
@@ -973,29 +1256,64 @@ function getCellChart() {
   const ctx = document.getElementById('cellChart').getContext('2d');
   cellChart = new Chart(ctx, {
     type: 'bar',
-    data: { labels: [], datasets: [{ label: 'Cell voltage (V)', data: [], backgroundColor: [] }] },
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'Voltage', data: [], backgroundColor: [], yAxisID: 'y', order: 1 },
+        {
+          // Cell resistance as a line over the bars, on its own right-hand axis.
+          // Cells with no reading are null, which leaves a gap in the line.
+          type: 'line',
+          label: 'Resistance',
+          data: [],
+          yAxisID: 'yResistance',
+          order: 0, // draw on top of the bars
+          borderColor: CELL_RESISTANCE_COLOR,
+          backgroundColor: CELL_RESISTANCE_COLOR,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: 0
+        }
+      ]
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       animation: { duration: 200 },
       // Don't fade bar colours: mid-fade blends of blue/red/orange look like extra colours
       animations: { colors: false },
+      // One tooltip per cell showing both its voltage and its resistance
+      interaction: { mode: 'index', intersect: false },
       scales: {
         y: {
           beginAtZero: false,
           min: CELL_VOLTAGE_AXIS_MIN,
           max: CELL_VOLTAGE_AXIS_MAX,
           ticks: { callback: (v) => v.toFixed(2) + ' V' }
+        },
+        yResistance: {
+          position: 'right',
+          min: CELL_RESISTANCE_AXIS_MIN,
+          max: CELL_RESISTANCE_AXIS_MAX,
+          ticks: { callback: (v) => v + ' mΩ' },
+          // Only the voltage axis draws grid lines; two overlapping grids are unreadable
+          grid: { drawOnChartArea: false }
         }
       },
       plugins: {
         legend: { display: false },
         tooltip: {
+          itemSort: (a, b) => a.datasetIndex - b.datasetIndex,
           callbacks: {
-            afterLabel: (item) => {
-              const r = cellChart.data.datasets[0].resistances?.[item.dataIndex];
-              return r === undefined ? '' : (r >= 65.535 ? 'R: n/a' : `R: ${(r * 1000).toFixed(1)} mΩ`);
-            }
+            label: (item) => (item.datasetIndex === 0
+              ? `Voltage: ${item.parsed.y.toFixed(3)} V`
+              : `Resistance: ${item.parsed.y.toFixed(1)} mΩ`),
+            // A cell with no resistance reading has no line point (so no
+            // tooltip item of its own): say so under its voltage instead.
+            afterLabel: (item) => (item.datasetIndex === 0
+              && cellChart.data.datasets[1].data[item.dataIndex] === null
+              ? 'Resistance: n/a' : '')
           }
         }
       }
@@ -1013,7 +1331,11 @@ function updateCellChart(activeIndices, d) {
   chart.data.labels = activeIndices.map((i) => `Cell ${i + 1}`);
   const dataset = chart.data.datasets[0];
   dataset.data = voltages;
-  dataset.resistances = activeIndices.map((i) => d.resistances[i]);
+  // d.resistances is in Ω; the resistance axis is in mΩ
+  chart.data.datasets[1].data = activeIndices.map((i) => {
+    const r = d.resistances[i];
+    return r >= CELL_RESISTANCE_NA ? null : r * 1000;
+  });
   dataset.backgroundColor = voltages.map((v) => {
     if (v === maxV && maxV !== minV) return CELL_BAR_COLOR_MAX;
     if (v === minV && maxV !== minV) return CELL_BAR_COLOR_MIN;
@@ -1472,6 +1794,7 @@ async function setupConnection() {
   // settings changed on the BMS stay current.
   if (infoRefreshTimer) clearInterval(infoRefreshTimer);
   infoRefreshTimer = setInterval(() => {
+    if (pendingDetailLog) return; // don't interleave other requests with a detailed log transfer
     requestDeviceInfoAndSettings().catch((e) => showError(e.message));
   }, INFO_REFRESH_INTERVAL_MS);
 
@@ -1479,7 +1802,7 @@ async function setupConnection() {
   // ourselves if none has arrived recently, to avoid duplicate frames.
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(() => {
-    if (Date.now() - lastLiveDataAt > LIVE_DATA_REQUEST_THRESHOLD_MS) {
+    if (!pendingDetailLog && Date.now() - lastLiveDataAt > LIVE_DATA_REQUEST_THRESHOLD_MS) {
       sendCommand([0x96]).catch((e) => showError(e.message));
     }
   }, 1000);
