@@ -163,11 +163,6 @@
               <div class="col-12"><div class="kv-label">UART3 protocol</div><div id="infoUart3Protocol" class="kv-value"></div></div>
               <div class="col-12"><div class="kv-label">CAN protocol</div><div id="infoCanProtocol" class="kv-value"></div></div>
             </div>
-            <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
-              <button id="downloadSystemLog" class="btn btn-sm btn-outline-secondary">Download system log</button>
-              <button id="downloadDetailLog" class="btn btn-sm btn-outline-secondary">Download detailed log</button>
-            </div>
-            <div id="logDownloadStatus" class="small text-body-secondary mt-2"></div>
           </div>
         </div>
       </div>
@@ -176,6 +171,22 @@
         <div class="card h-100">
           <div class="card-header">Settings</div>
           <div id="settingsOutput" class="card-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="logAnalysisCard" class="card mb-3" style="display:none">
+      <div class="card-header">Log Analysis</div>
+      <div class="card-body">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <button id="downloadSystemLog" class="btn btn-sm btn-outline-secondary">Download system log</button>
+          <button id="downloadDetailLog" class="btn btn-sm btn-outline-secondary">Download detailed log</button>
+          <span id="logDownloadStatus" class="small text-body-secondary"></span>
+        </div>
+        <div id="detailLogAnalysisHint" class="small text-body-secondary mt-3">Download the detailed log to see its analysis here.</div>
+        <div id="detailLogAnalysis" class="mt-3" style="display:none">
+          <div id="detailLogAnalysisRange" class="kv-label mb-2"></div>
+          <div id="detailLogCharts" class="row g-4"></div>
         </div>
       </div>
     </div>
@@ -232,7 +243,7 @@
       &middot;
       <a href="https://github.com/bhaggya55/jkbms-monitor/blob/master/README.md" target="_blank" rel="noopener noreferrer">README</a>
       &middot;
-      <a href="https://github.com/bhaggya55/jkbms-monitor/releases/tag/v1.4.1" target="_blank" rel="noopener noreferrer">v1.4.1</a>
+      <a href="https://github.com/bhaggya55/jkbms-monitor/releases/tag/v1.5.0" target="_blank" rel="noopener noreferrer">v1.5.0</a>
     </footer>
   </div>
 
@@ -555,10 +566,18 @@ const SYSTEM_LOG_EVENT_NAMES = [
   'Discharge under temperature protection', 'Discharge under temperature protection Release',
 ];
 
+// Per-cell over-voltage (over charge) protection events: one code per cell, 0x64 = cell 1
+const CELL_OVP_CODE_FIRST = 0x64;
+const CELL_OVP_CODE_LAST = 0x83;
+// Per-cell under-voltage (over discharge) protection events, 0xC8 = cell 1
+const CELL_UVP_CODE_FIRST = 0xc8;
+const CELL_UVP_CODE_LAST = 0xe7;
+const CELL_OVP_RELEASE_CODE = 0x12; // "Cell overcharge protection is released"
+
 function systemLogEventName(code) {
   const cell = (first) => String(code - first + 1).padStart(2, '0');
-  if (code >= 0x64 && code <= 0x83) return `Cell ${cell(0x64)} over charge protection`;
-  if (code >= 0xc8 && code <= 0xe7) return `Cell ${cell(0xc8)} over discharge protection`;
+  if (code >= CELL_OVP_CODE_FIRST && code <= CELL_OVP_CODE_LAST) return `Cell ${cell(CELL_OVP_CODE_FIRST)} over charge protection`;
+  if (code >= CELL_UVP_CODE_FIRST && code <= CELL_UVP_CODE_LAST) return `Cell ${cell(CELL_UVP_CODE_FIRST)} over discharge protection`;
   return SYSTEM_LOG_EVENT_NAMES[code - 1] || 'Unknown';
 }
 
@@ -635,8 +654,8 @@ function downloadTextFile(filename, text, type) {
 // each with a snapshot of the pack at that moment. Worked out from a capture
 // of the official app exporting it from a JK_B2A20S20P (firmware 11.54).
 // Command 0xA7 makes the BMS send the whole log,
-// oldest record first, as a run of type 0x06 frames (with LIVE_DATA frames
-// still arriving in between):
+// oldest record first, as an uninterrupted run of type 0x06 frames (it stops
+// streaming LIVE_DATA until the run is over):
 //  6-7 index of the frame's first record (u16), 8 number of records in the
 //  frame (12, fewer in the last one), then 24-byte records from offset 9:
 //   0-3 time in seconds since 2020-01-01 00:00 UTC+8 (u32, as set by the
@@ -742,6 +761,365 @@ function detailLogCsv(records) {
   return rows.join('\r\n') + '\r\n';
 }
 
+// Analysis of a downloaded detailed log, shown as charts in the Log Analysis
+// card. The log only has a record when an event occurs, so every chart is
+// about the events themselves; nothing here shows the pack between events.
+const LOG_CHART_HEIGHT = 220;
+const LOG_CHART_ROW_HEIGHT = 22; // per bar in the ranked (horizontal) charts
+const DAY_MS = 86400000;
+
+const isCellOvp = (r) => r.code >= CELL_OVP_CODE_FIRST && r.code <= CELL_OVP_CODE_LAST;
+const isCellUvp = (r) => r.code >= CELL_UVP_CODE_FIRST && r.code <= CELL_UVP_CODE_LAST;
+const logDay = (date) => formatLocalDateTime(date).slice(0, 10);
+
+// Counts per cell, most first. Cells the BMS currently reports are listed
+// even with a count of zero, so each ranking covers the whole pack.
+function rankCells(cellNumbers) {
+  const counts = new Map();
+  if (lastLiveData) lastLiveData.cells.forEach((v, i) => { if (v > 0.5) counts.set(i + 1, 0); });
+  for (const cell of cellNumbers) counts.set(cell, (counts.get(cell) || 0) + 1);
+  return [...counts]
+    .map(([cell, count]) => ({ cell, count }))
+    .sort((a, b) => b.count - a.count || a.cell - b.cell);
+}
+
+// Every calendar day from the first to the last of `dates`, so quiet days
+// show as gaps. If the span is implausibly long (e.g. the BMS clock was set
+// partway through the log), only the days that have records are listed.
+function daysSpanned(dates) {
+  const first = new Date(Math.min(...dates));
+  const last = new Date(Math.max(...dates));
+  first.setHours(0, 0, 0, 0);
+  if (last - first > 366 * DAY_MS) return [...new Set(dates.map(logDay))].sort();
+  const days = [];
+  for (const d = first; d <= last; d.setDate(d.getDate() + 1)) days.push(logDay(d));
+  return days;
+}
+
+function analyseDetailLog(records) {
+  const trips = records.filter(isCellOvp).map((r) => ({ ...r, cell: r.code - CELL_OVP_CODE_FIRST + 1 }));
+  const days = daysSpanned(records.map((r) => r.time));
+  const dayIndex = new Map(days.map((d, i) => [d, i]));
+
+  const tripsPerDay = days.map(() => 0);
+  const tripsPerHour = Array.from({ length: 24 }, () => 0);
+  for (const t of trips) {
+    tripsPerDay[dayIndex.get(logDay(t.time))]++;
+    tripsPerHour[t.time.getHours()]++;
+  }
+
+  // Charging is blocked from a cell OVP trip until the following release.
+  // Each stretch is counted on the day it started.
+  const blockedMinutesPerDay = days.map(() => 0);
+  let blockedSince = null;
+  for (const r of records) {
+    if (isCellOvp(r)) {
+      if (!blockedSince) blockedSince = r.time;
+    } else if (r.code === CELL_OVP_RELEASE_CODE && blockedSince) {
+      const minutes = (r.time - blockedSince) / 60000;
+      if (minutes > 0) blockedMinutesPerDay[dayIndex.get(logDay(blockedSince))] += minutes;
+      blockedSince = null;
+    }
+  }
+
+  const times = records.map((r) => r.time.getTime());
+  const start = new Date(Math.min(...times));
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(Math.max(...times));
+  end.setHours(24, 0, 0, 0);
+
+  return {
+    records, trips, days, tripsPerDay, tripsPerHour, blockedMinutesPerDay,
+    uvpCells: records.filter(isCellUvp).map((r) => r.code - CELL_UVP_CODE_FIRST + 1),
+    startMs: start.getTime(),
+    endMs: end.getTime(),
+  };
+}
+
+// Draws each bar's value just past its end (horizontal bar charts)
+const barEndCountPlugin = {
+  id: 'barEndCount',
+  afterDatasetsDraw(c) {
+    const { ctx } = c;
+    ctx.save();
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = Chart.defaults.color;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    c.getDatasetMeta(0).data.forEach((bar, i) => {
+      ctx.fillText(c.data.datasets[0].data[i].toLocaleString(), bar.x + 6, bar.y);
+    });
+    ctx.restore();
+  },
+};
+
+// Horizontal bars, one per cell, most first, each labelled with its count
+function rankedCellChart(cellNumbers, unit) {
+  if (!cellNumbers.length) return null;
+  const ranking = rankCells(cellNumbers);
+  return {
+    height: ranking.length * LOG_CHART_ROW_HEIGHT + 8,
+    config: {
+      type: 'bar',
+      data: {
+        labels: ranking.map((c) => `Cell ${c.cell}`),
+        datasets: [{
+          data: ranking.map((c) => c.count),
+          backgroundColor: CELL_BAR_COLOR, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 14,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        layout: { padding: { right: 36 } }, // room for the count at the end of the longest bar
+        scales: {
+          // Each bar carries its own count, so the value axis would only repeat it
+          x: { display: false, beginAtZero: true },
+          y: { grid: { display: false }, border: { display: false }, ticks: { autoSkip: false } },
+        },
+        plugins: { tooltip: { callbacks: { label: (item) => `${item.parsed.x} ${unit}` } } },
+      },
+      plugins: [barEndCountPlugin],
+    },
+  };
+}
+
+// Vertical bars over a fixed set of categories (days, hours)
+function columnChart(labels, values, { tickLabel = (l) => l, valueLabel, title = (l) => l, yTick = (v) => v }) {
+  if (!values.some((v) => v > 0)) return null;
+  return {
+    height: LOG_CHART_HEIGHT,
+    config: {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: values, backgroundColor: CELL_BAR_COLOR, borderRadius: 4, borderSkipped: 'bottom', maxBarThickness: 28,
+        }],
+      },
+      options: {
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { maxRotation: 0, autoSkipPadding: 8, callback(value) { return tickLabel(this.getLabelForValue(value)); } },
+          },
+          y: { beginAtZero: true, border: { display: false }, ticks: { precision: 0, maxTicksLimit: 6, callback: yTick } },
+        },
+        plugins: {
+          tooltip: { callbacks: { title: (items) => title(items[0].label), label: (item) => valueLabel(item.parsed.y) } },
+        },
+      },
+    },
+  };
+}
+
+// A linear axis over time with a tick at midnight every few days. (Chart.js's
+// own time axis needs a date library, which isn't vendored.)
+function timeAxis(a) {
+  const stepDays = Math.max(1, Math.ceil((a.endMs - a.startMs) / DAY_MS / 7));
+  return {
+    type: 'linear',
+    min: a.startMs,
+    max: a.endMs,
+    grid: { display: false },
+    afterBuildTicks(scale) {
+      const ticks = [];
+      for (const d = new Date(a.startMs); d.getTime() <= a.endMs; d.setDate(d.getDate() + stepDays)) {
+        ticks.push({ value: d.getTime() });
+      }
+      scale.ticks = ticks;
+    },
+    ticks: { maxRotation: 0, callback: (v) => logDay(new Date(v)).slice(5) },
+  };
+}
+
+function scatterChart(points, { x, y, title, label }) {
+  if (!points.length) return null;
+  return {
+    height: LOG_CHART_HEIGHT,
+    config: {
+      type: 'scatter',
+      data: {
+        // Translucent so that piled-up events read as darker
+        datasets: [{ data: points, backgroundColor: `${CELL_BAR_COLOR}73`, pointRadius: 3, pointHoverRadius: 6 }],
+      },
+      options: {
+        scales: { x, y: { border: { display: false }, ...y } },
+        plugins: { tooltip: { callbacks: { title: (items) => title(items[0].raw), label: (item) => label(item.raw) } } },
+      },
+    },
+  };
+}
+
+// Each entry builds one chart from the analysis, or returns null when the log
+// has nothing for it.
+const LOG_CHARTS = [
+  {
+    title: 'Cell OVP events',
+    note: 'Over-voltage protection trips per cell.',
+    build: (a) => rankedCellChart(a.trips.map((t) => t.cell), 'OVP events'),
+  },
+  {
+    title: 'Lowest cell at OVP trips',
+    note: 'Which cell had the lowest voltage each time another cell tripped: the cells holding the pack back.',
+    build: (a) => rankedCellChart(a.trips.map((t) => t.minCell), 'times lowest'),
+  },
+  {
+    title: 'OVP events per day',
+    note: 'How many times a cell tripped over-voltage protection each day.',
+    build: (a) => columnChart(a.days, a.tripsPerDay, {
+      tickLabel: (day) => day.slice(5),
+      valueLabel: (v) => `${v} OVP events`,
+    }),
+  },
+  {
+    title: 'Charging blocked by OVP per day',
+    note: 'Time from each OVP trip to its release, added up per day.',
+    build: (a) => columnChart(a.days, a.blockedMinutesPerDay.map((m) => Math.round(m * 10) / 10), {
+      tickLabel: (day) => day.slice(5),
+      valueLabel: (v) => `${v.toLocaleString()} min blocked`,
+      yTick: (v) => `${v} min`,
+    }),
+  },
+  {
+    title: 'OVP events by hour of day',
+    note: 'When in the day the trips happen, over the whole log.',
+    build: (a) => columnChart(a.tripsPerHour.map((_, h) => String(h).padStart(2, '0')), a.tripsPerHour, {
+      title: (hour) => `${hour}:00 to ${hour}:59`,
+      valueLabel: (v) => `${v} OVP events`,
+    }),
+  },
+  {
+    title: 'Cell voltage spread at OVP trips',
+    note: 'Highest minus lowest cell voltage at each trip. A falling trend means balancing is catching up.',
+    build: (a) => scatterChart(
+      a.trips.map((t) => ({ x: t.time.getTime(), y: Math.round((t.maxCellVoltage - t.minCellVoltage) * 1000), cell: t.cell })),
+      {
+        x: timeAxis(a),
+        y: { beginAtZero: true, ticks: { maxTicksLimit: 6, callback: (v) => `${v} mV` } },
+        title: (p) => formatLocalDateTime(new Date(p.x)),
+        label: (p) => `${p.y} mV spread when cell ${p.cell} tripped`,
+      }),
+  },
+  {
+    title: 'Charge current at OVP trips',
+    note: 'Pack current at the moment each cell tripped. A cell that only trips at high current points to resistance rather than charge level.',
+    build: (a) => {
+      const lastCell = Math.max(...rankCells(a.trips.map((t) => t.cell)).map((c) => c.cell));
+      return scatterChart(
+        a.trips.map((t) => ({ x: t.cell, y: t.current, time: t.time })),
+        {
+          x: {
+            min: 0.5, max: lastCell + 0.5, grid: { display: false }, title: { display: true, text: 'Cell' },
+            afterBuildTicks(scale) { scale.ticks = Array.from({ length: lastCell }, (_, i) => ({ value: i + 1 })); },
+            ticks: { maxRotation: 0 },
+          },
+          y: { ticks: { maxTicksLimit: 6, callback: (v) => `${v} A` } },
+          title: (p) => formatLocalDateTime(p.time),
+          label: (p) => `${p.y.toFixed(1)} A when cell ${p.x} tripped`,
+        });
+    },
+  },
+  {
+    title: 'Temperatures at logged events',
+    note: 'Recorded only when an event occurs, so quiet periods are straight lines between events.',
+    build: (a) => {
+      const series = [['Battery max', 'maxTemp'], ['MOSFET', 'mosTemp'], ['Battery min', 'minTemp']];
+      const colors = [CELL_BAR_COLOR, CELL_BAR_COLOR_MAX, CELL_RESISTANCE_COLOR];
+      return {
+        height: LOG_CHART_HEIGHT,
+        config: {
+          type: 'line',
+          data: {
+            datasets: series.map(([label, field], i) => ({
+              label,
+              data: a.records.map((r) => ({ x: r.time.getTime(), y: r[field] })),
+              borderColor: colors[i], backgroundColor: colors[i],
+              borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+            })),
+          },
+          options: {
+            interaction: { mode: 'nearest', axis: 'x', intersect: false },
+            scales: {
+              x: timeAxis(a),
+              y: { border: { display: false }, ticks: { maxTicksLimit: 6, callback: (v) => `${v} °C` } },
+            },
+            plugins: {
+              legend: { display: true, position: 'bottom', labels: { boxWidth: 12, boxHeight: 12 } },
+              tooltip: {
+                callbacks: {
+                  title: (items) => formatLocalDateTime(new Date(items[0].parsed.x)),
+                  label: (item) => `${item.dataset.label}: ${item.parsed.y} °C`,
+                },
+              },
+            },
+          },
+        },
+      };
+    },
+  },
+  {
+    title: 'Cell UVP events',
+    note: 'Under-voltage protection trips per cell. A cell high on both this and the OVP chart may be low on capacity.',
+    build: (a) => rankedCellChart(a.uvpCells, 'UVP events'),
+  },
+];
+
+let logCharts = []; // the Chart.js instances currently shown in the Log Analysis card
+
+function showDetailLogAnalysis(show) {
+  document.getElementById('detailLogAnalysis').style.display = show ? '' : 'none';
+  document.getElementById('detailLogAnalysisHint').style.display = show ? 'none' : '';
+}
+
+function renderDetailLogAnalysis(records) {
+  showDetailLogAnalysis(records.length > 0);
+  if (!records.length) return;
+  const analysis = analyseDetailLog(records);
+  document.getElementById('detailLogAnalysisRange').textContent =
+    `${records.length.toLocaleString()} records, ${analysis.days[0]} to ${analysis.days[analysis.days.length - 1]}`;
+
+  logCharts.forEach((c) => c.destroy());
+  logCharts = [];
+  const container = document.getElementById('detailLogCharts');
+  container.replaceChildren();
+  const el = (tag, className, text) => {
+    const e = document.createElement(tag);
+    e.className = className;
+    if (text) e.textContent = text;
+    return e;
+  };
+  for (const def of LOG_CHARTS) {
+    const col = el('div', 'col-lg-6');
+    col.append(el('div', 'fw-semibold', def.title));
+    container.append(col);
+    const built = def.build(analysis);
+    if (!built) {
+      col.append(el('div', 'small text-body-secondary', 'None in this log.'));
+      continue;
+    }
+    col.append(el('div', 'small text-body-secondary mb-2', def.note));
+    const wrap = el('div', '');
+    wrap.style.position = 'relative';
+    wrap.style.height = `${built.height}px`;
+    const canvas = el('canvas', '');
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', `${def.title}. ${def.note}`);
+    wrap.append(canvas);
+    col.append(wrap);
+    const { options } = built.config;
+    logCharts.push(new Chart(canvas.getContext('2d'), {
+      ...built.config,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        ...options,
+        plugins: { legend: { display: false }, ...options.plugins },
+      },
+    }));
+  }
+}
+
 const logDownloadButtons = ['downloadSystemLog', 'downloadDetailLog'].map((id) => document.getElementById(id));
 const logDownloadStatus = document.getElementById('logDownloadStatus');
 
@@ -773,6 +1151,7 @@ document.getElementById('downloadSystemLog').addEventListener('click', () => run
 document.getElementById('downloadDetailLog').addEventListener('click', () => runLogDownload(async () => {
   const log = await requestDetailLog((n) => { logDownloadStatus.textContent = `Receiving… ${n} records`; });
   downloadLogCsv('detail-log', detailLogCsv(log.records));
+  renderDetailLogAnalysis(log.records);
   return `Downloaded ${log.records.length} records.`
     + (log.complete ? '' : ' The BMS stopped sending without marking the end, so the log may be incomplete.');
 }));
@@ -1764,6 +2143,7 @@ function setConnectedUi(connected) {
   document.getElementById('cellVoltagesCard').style.display = display;
   document.getElementById('bmsStatusCard').style.display = display;
   document.getElementById('packSummaryCard').style.display = display;
+  document.getElementById('logAnalysisCard').style.display = display;
   document.getElementById('remoteSyncCard').style.display = display;
 }
 
@@ -1860,6 +2240,8 @@ function resetDeviceState() {
   lastUse32S = null;
   document.getElementById('deviceInfoCard').style.display = 'none';
   document.getElementById('settingsCard').style.display = 'none';
+  showDetailLogAnalysis(false);
+  logDownloadStatus.textContent = '';
 }
 
 function handleGattDisconnected(event) {
