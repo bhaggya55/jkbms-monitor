@@ -53,140 +53,203 @@
       </div>
     </div>
 
-    <div id="packStatusCard" class="card mb-3" style="display:none">
-      <div class="card-header text-center">Pack Status</div>
-      <div class="card-body">
-        <div class="row justify-content-center text-center gx-4 gy-3 gy-sm-4">
-          <div class="col-12 col-sm-auto">
-            <div class="gauge-wrap"><canvas id="powerGauge"></canvas></div>
-          </div>
-          <div class="col-12 col-sm-auto">
-            <div class="gauge-wrap"><canvas id="socGauge"></canvas></div>
-          </div>
-          <div class="col-12 col-sm-auto">
-            <div class="gauge-wrap"><canvas id="deltaGauge"></canvas></div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ul class="nav nav-tabs mb-3" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button id="monitorTabButton" class="nav-link active" data-bs-toggle="tab" data-bs-target="#monitorTab" type="button" role="tab" aria-controls="monitorTab" aria-selected="true">Monitor</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button id="logAnalysisTabButton" class="nav-link" data-bs-toggle="tab" data-bs-target="#logAnalysisTab" type="button" role="tab" aria-controls="logAnalysisTab" aria-selected="false">Log Analysis</button>
+      </li>
+    </ul>
 
-    <div id="cellVoltagesCard" class="card mb-3" style="display:none">
-      <div class="card-header">Cell Voltages and Wire Resistances</div>
-      <div class="card-body">
-        <div id="cellChartWrap">
-          <canvas id="cellChart"></canvas>
-        </div>
-      </div>
-    </div>
+    <div class="tab-content">
+      <div id="monitorTab" class="tab-pane active" role="tabpanel" aria-labelledby="monitorTabButton" tabindex="0">
+        <div id="monitorHint" class="text-body-secondary mb-3">Connect to a JK-BMS to see its live data here.</div>
 
-    <div id="bmsStatusCard" class="card mb-3" style="display:none">
-      <div class="card-header">BMS Status</div>
-      <div class="card-body">
-        <div class="row row-cols-1 row-cols-lg-3 g-3">
-          <div class="col">
-            <div class="section-label">State</div>
-            <div id="statePills" class="d-flex flex-wrap gap-1">–</div>
-          </div>
-          <div class="col">
-            <div class="section-label">Inputs &amp; outputs</div>
-            <div id="ioPills" class="d-flex flex-wrap gap-1">–</div>
-          </div>
-          <div class="col">
-            <div class="section-label">Alarms</div>
-            <div id="alarmPills" class="d-flex flex-wrap gap-1">–</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div id="packSummaryCard" class="card mb-3" style="display:none">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Pack Summary</span>
-        <span id="protocolBadge" class="badge text-bg-secondary fw-normal"></span>
-      </div>
-      <div class="card-body">
-        <div class="section-label">Pack</div>
-        <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
-          <div class="col"><div class="stat-tile"><div class="stat-label">Voltage</div><div class="stat-value"><span id="sumPackVoltage">–</span><span class="stat-unit">V</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Current</div><div class="stat-value"><span id="sumCurrent">–</span><span class="stat-unit">A</span></div><div id="sumCurrentState" class="stat-sub"></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Power</div><div class="stat-value"><span id="sumPower">–</span><span class="stat-unit">W</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">State of charge</div><div class="stat-value"><span id="sumSoc">–</span><span class="stat-unit">%</span></div></div></div>
-        </div>
-        <div class="section-label">Capacity &amp; health</div>
-        <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
-          <div class="col"><div class="stat-tile"><div class="stat-label">Remaining</div><div class="stat-value"><span id="sumRemaining">–</span><span class="stat-unit">Ah</span></div><div id="sumFullCapacity" class="stat-sub"></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">State of health</div><div class="stat-value"><span id="sumSoh">–</span><span class="stat-unit">%</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Cycles</div><div class="stat-value"><span id="sumCycles">–</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Total cycled</div><div class="stat-value"><span id="sumCycled">–</span><span class="stat-unit">Ah</span></div></div></div>
-        </div>
-        <div class="section-label">Cells</div>
-        <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-2 mb-3">
-          <div class="col"><div class="stat-tile"><div class="stat-label">Max cell</div><div class="stat-value"><span id="sumMaxCell" class="text-cell-max">–</span><span class="stat-unit">V</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Min cell</div><div class="stat-value"><span id="sumMinCell" class="text-cell-min">–</span><span class="stat-unit">V</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Average cell</div><div class="stat-value"><span id="sumAvgCell">–</span><span class="stat-unit">V</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Delta</div><div class="stat-value"><span id="sumDelta">–</span><span class="stat-unit">mV</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Balance current</div><div class="stat-value"><span id="sumBalanceCurrent">–</span><span class="stat-unit">mA</span></div></div></div>
-        </div>
-        <div class="section-label">Temperatures</div>
-        <div class="row row-cols-3 g-2">
-          <div class="col"><div class="stat-tile"><div class="stat-label">Sensor 1</div><div class="stat-value"><span id="sumT1">–</span><span class="stat-unit">°C</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">Sensor 2</div><div class="stat-value"><span id="sumT2">–</span><span class="stat-unit">°C</span></div></div></div>
-          <div class="col"><div class="stat-tile"><div class="stat-label">MOSFET</div><div class="stat-value"><span id="sumMosTemp">–</span><span class="stat-unit">°C</span></div></div></div>
-        </div>
-      </div>
-    </div>
-
-    <details id="debug" class="mb-3" style="display:none">
-      <summary class="mb-2">Debug: last raw frame</summary>
-      <pre id="rawFrame" class="small text-break bg-body-tertiary p-2 rounded"></pre>
-    </details>
-
-    <div class="row g-3 mb-3">
-      <div id="deviceInfoCard" class="col-lg-4" style="display:none">
-        <div class="card h-100">
-          <div class="card-header">Device Info</div>
+        <div id="packStatusCard" class="card mb-3" style="display:none">
+          <div class="card-header text-center">Pack Status</div>
           <div class="card-body">
-            <div class="row row-cols-2 row-cols-md-3 row-cols-lg-2 g-3">
-              <div class="col"><div class="kv-label">Model</div><div id="infoModel" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Serial number</div><div id="infoSerial" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Hardware</div><div id="infoHw" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Software</div><div id="infoSw" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Manufactured</div><div id="infoManufactured" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Uptime</div><div id="infoUptime" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Power-on count</div><div id="infoPowerOnCount" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Battery type</div><div id="infoBatteryType" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Log entries</div><div id="infoLogCount" class="kv-value"></div></div>
-              <div class="col"><div class="kv-label">Bluetooth name</div><div id="infoBtName" class="kv-value"></div></div>
-              <div class="col-12"><div class="kv-label">Bluetooth ID</div><div id="infoBtId" class="kv-value font-monospace small"></div></div>
-              <div class="col-12"><div class="kv-label">UART1 protocol</div><div id="infoUart1Protocol" class="kv-value"></div></div>
-              <div class="col-12"><div class="kv-label">UART2 protocol</div><div id="infoUart2Protocol" class="kv-value"></div></div>
-              <div class="col-12"><div class="kv-label">UART3 protocol</div><div id="infoUart3Protocol" class="kv-value"></div></div>
-              <div class="col-12"><div class="kv-label">CAN protocol</div><div id="infoCanProtocol" class="kv-value"></div></div>
+            <div class="row justify-content-center text-center gx-4 gy-3 gy-sm-4">
+              <div class="col-12 col-sm-auto">
+                <div class="gauge-wrap"><canvas id="powerGauge"></canvas></div>
+              </div>
+              <div class="col-12 col-sm-auto">
+                <div class="gauge-wrap"><canvas id="socGauge"></canvas></div>
+              </div>
+              <div class="col-12 col-sm-auto">
+                <div class="gauge-wrap"><canvas id="deltaGauge"></canvas></div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div id="settingsCard" class="col-lg" style="display:none">
-        <div class="card h-100">
-          <div class="card-header">Settings</div>
-          <div id="settingsOutput" class="card-body"></div>
+        <div id="cellVoltagesCard" class="card mb-3" style="display:none">
+          <div class="card-header">Cell Voltages and Wire Resistances</div>
+          <div class="card-body">
+            <div id="cellChartWrap">
+              <canvas id="cellChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div id="bmsStatusCard" class="card mb-3" style="display:none">
+          <div class="card-header">BMS Status</div>
+          <div class="card-body">
+            <div class="row row-cols-1 row-cols-lg-3 g-3">
+              <div class="col">
+                <div class="section-label">State</div>
+                <div id="statePills" class="d-flex flex-wrap gap-1">–</div>
+              </div>
+              <div class="col">
+                <div class="section-label">Inputs &amp; outputs</div>
+                <div id="ioPills" class="d-flex flex-wrap gap-1">–</div>
+              </div>
+              <div class="col">
+                <div class="section-label">Alarms</div>
+                <div id="alarmPills" class="d-flex flex-wrap gap-1">–</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="packSummaryCard" class="card mb-3" style="display:none">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Pack Summary</span>
+            <span id="protocolBadge" class="badge text-bg-secondary fw-normal"></span>
+          </div>
+          <div class="card-body">
+            <div class="section-label">Pack</div>
+            <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
+              <div class="col"><div class="stat-tile"><div class="stat-label">Voltage</div><div class="stat-value"><span id="sumPackVoltage">–</span><span class="stat-unit">V</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Current</div><div class="stat-value"><span id="sumCurrent">–</span><span class="stat-unit">A</span></div><div id="sumCurrentState" class="stat-sub"></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Power</div><div class="stat-value"><span id="sumPower">–</span><span class="stat-unit">W</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">State of charge</div><div class="stat-value"><span id="sumSoc">–</span><span class="stat-unit">%</span></div></div></div>
+            </div>
+            <div class="section-label">Capacity &amp; health</div>
+            <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
+              <div class="col"><div class="stat-tile"><div class="stat-label">Remaining</div><div class="stat-value"><span id="sumRemaining">–</span><span class="stat-unit">Ah</span></div><div id="sumFullCapacity" class="stat-sub"></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">State of health</div><div class="stat-value"><span id="sumSoh">–</span><span class="stat-unit">%</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Cycles</div><div class="stat-value"><span id="sumCycles">–</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Total cycled</div><div class="stat-value"><span id="sumCycled">–</span><span class="stat-unit">Ah</span></div></div></div>
+            </div>
+            <div class="section-label">Cells</div>
+            <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-2 mb-3">
+              <div class="col"><div class="stat-tile"><div class="stat-label">Max cell</div><div class="stat-value"><span id="sumMaxCell" class="text-cell-max">–</span><span class="stat-unit">V</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Min cell</div><div class="stat-value"><span id="sumMinCell" class="text-cell-min">–</span><span class="stat-unit">V</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Average cell</div><div class="stat-value"><span id="sumAvgCell">–</span><span class="stat-unit">V</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Delta</div><div class="stat-value"><span id="sumDelta">–</span><span class="stat-unit">mV</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Balance current</div><div class="stat-value"><span id="sumBalanceCurrent">–</span><span class="stat-unit">mA</span></div></div></div>
+            </div>
+            <div class="section-label">Temperatures</div>
+            <div class="row row-cols-3 g-2">
+              <div class="col"><div class="stat-tile"><div class="stat-label">Sensor 1</div><div class="stat-value"><span id="sumT1">–</span><span class="stat-unit">°C</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">Sensor 2</div><div class="stat-value"><span id="sumT2">–</span><span class="stat-unit">°C</span></div></div></div>
+              <div class="col"><div class="stat-tile"><div class="stat-label">MOSFET</div><div class="stat-value"><span id="sumMosTemp">–</span><span class="stat-unit">°C</span></div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <details id="debug" class="mb-3" style="display:none">
+          <summary class="mb-2">Debug: last raw frame</summary>
+          <pre id="rawFrame" class="small text-break bg-body-tertiary p-2 rounded"></pre>
+        </details>
+
+        <div class="row g-3 mb-3">
+          <div id="deviceInfoCard" class="col-lg-4" style="display:none">
+            <div class="card h-100">
+              <div class="card-header">Device Info</div>
+              <div class="card-body">
+                <div class="row row-cols-2 row-cols-md-3 row-cols-lg-2 g-3">
+                  <div class="col"><div class="kv-label">Model</div><div id="infoModel" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Serial number</div><div id="infoSerial" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Hardware</div><div id="infoHw" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Software</div><div id="infoSw" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Manufactured</div><div id="infoManufactured" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Uptime</div><div id="infoUptime" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Power-on count</div><div id="infoPowerOnCount" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Battery type</div><div id="infoBatteryType" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Log entries</div><div id="infoLogCount" class="kv-value"></div></div>
+                  <div class="col"><div class="kv-label">Bluetooth name</div><div id="infoBtName" class="kv-value"></div></div>
+                  <div class="col-12"><div class="kv-label">Bluetooth ID</div><div id="infoBtId" class="kv-value font-monospace small"></div></div>
+                  <div class="col-12"><div class="kv-label">UART1 protocol</div><div id="infoUart1Protocol" class="kv-value"></div></div>
+                  <div class="col-12"><div class="kv-label">UART2 protocol</div><div id="infoUart2Protocol" class="kv-value"></div></div>
+                  <div class="col-12"><div class="kv-label">UART3 protocol</div><div id="infoUart3Protocol" class="kv-value"></div></div>
+                  <div class="col-12"><div class="kv-label">CAN protocol</div><div id="infoCanProtocol" class="kv-value"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="settingsCard" class="col-lg" style="display:none">
+            <div class="card h-100">
+              <div class="card-header">Settings</div>
+              <div id="settingsOutput" class="card-body"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="remoteSyncCard" class="card mb-3" style="display:none">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Remote Sync</span>
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" role="switch" id="remoteSyncEnabled">
+              <label class="form-check-label" for="remoteSyncEnabled" id="remoteSyncEnabledLabel">Off</label>
+            </div>
+          </div>
+          <div class="card-body">
+            <label for="remoteSyncUrl" class="form-label">POST status JSON to URL</label>
+            <input type="url" id="remoteSyncUrl" class="form-control" placeholder="https://example.com/webhook or http://192.168.1.10:8123/api/webhook/...">
+            <div class="row g-2 mt-1">
+              <div class="col-sm-6">
+                <label for="remoteSyncInterval" class="form-label small mb-1">Send at most every</label>
+                <select id="remoteSyncInterval" class="form-select form-select-sm">
+                  <option value="0">Every live frame</option>
+                  <option value="5">5 seconds</option>
+                  <option value="10" selected>10 seconds</option>
+                  <option value="30">30 seconds</option>
+                  <option value="60">1 minute</option>
+                  <option value="300">5 minutes</option>
+                </select>
+              </div>
+              <div class="col-sm-6">
+                <label for="remoteSyncMode" class="form-label small mb-1">Request mode</label>
+                <select id="remoteSyncMode" class="form-select form-select-sm">
+                  <option value="cors" selected>JSON (server must allow CORS)</option>
+                  <option value="simple">Simple (no CORS needed, response hidden)</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-text">
+              Settings are locked while sync is on. Local addresses (e.g. <code>http://192.168.x.x</code>, <code>*.local</code>)
+              work from the hosted site in Chrome/Edge after you allow local network access when prompted.
+              Use <em>Simple</em> mode if the server doesn't send CORS headers (Home Assistant, Node-RED, Google Apps Script).
+            </div>
+            <pre id="remoteSyncStatus" class="status-text mb-0 mt-2 text-body-secondary small"></pre>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div id="logAnalysisCard" class="card mb-3" style="display:none">
-      <div class="card-header">Log Analysis</div>
-      <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center gap-2">
-          <button id="downloadSystemLog" class="btn btn-sm btn-outline-secondary">Download system log</button>
-          <button id="downloadDetailLog" class="btn btn-sm btn-outline-secondary">Download detailed log</button>
-          <span id="logDownloadStatus" class="small text-body-secondary"></span>
-        </div>
-        <div id="detailLogAnalysisHint" class="small text-body-secondary mt-3">Download the detailed log to see its analysis here.</div>
-        <div id="detailLogAnalysis" class="mt-3" style="display:none">
-          <div id="detailLogAnalysisRange" class="kv-label mb-2"></div>
-          <div id="detailLogCharts" class="row g-4"></div>
+      <div id="logAnalysisTab" class="tab-pane" role="tabpanel" aria-labelledby="logAnalysisTabButton" tabindex="0">
+        <div class="card mb-3">
+          <div class="card-header">Log Analysis</div>
+          <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+              <button id="downloadSystemLog" class="btn btn-sm btn-outline-secondary" disabled>Download system log</button>
+              <button id="downloadDetailLog" class="btn btn-sm btn-outline-secondary" disabled>Download detailed log</button>
+              <button id="openDetailLog" class="btn btn-sm btn-outline-secondary">Open a saved detailed log…</button>
+              <input id="detailLogFile" type="file" accept=".csv,text/csv" class="d-none">
+              <span id="logDownloadStatus" class="small text-body-secondary"></span>
+            </div>
+            <div id="logDownloadHint" class="form-text">Connect to the BMS to download its logs. A detailed log saved earlier can be opened without connecting.</div>
+            <div id="detailLogAnalysisHint" class="small text-body-secondary mt-3">Download the detailed log, or open one saved earlier, to see its analysis here.</div>
+            <div id="detailLogAnalysis" class="mt-3" style="display:none">
+              <div id="detailLogAnalysisRange" class="kv-label mb-2"></div>
+              <div id="detailLogSummary" class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-2 mb-3"></div>
+              <div class="section-label">Events in this log</div>
+              <div id="detailLogEvents" class="d-flex flex-wrap gap-1 mb-4"></div>
+              <div id="detailLogCharts" class="row g-4"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -198,52 +261,12 @@
       </div>
     </div>
 
-    <div id="remoteSyncCard" class="card mb-3" style="display:none">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Remote Sync</span>
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input" type="checkbox" role="switch" id="remoteSyncEnabled">
-          <label class="form-check-label" for="remoteSyncEnabled" id="remoteSyncEnabledLabel">Off</label>
-        </div>
-      </div>
-      <div class="card-body">
-        <label for="remoteSyncUrl" class="form-label">POST status JSON to URL</label>
-        <input type="url" id="remoteSyncUrl" class="form-control" placeholder="https://example.com/webhook or http://192.168.1.10:8123/api/webhook/...">
-        <div class="row g-2 mt-1">
-          <div class="col-sm-6">
-            <label for="remoteSyncInterval" class="form-label small mb-1">Send at most every</label>
-            <select id="remoteSyncInterval" class="form-select form-select-sm">
-              <option value="0">Every live frame</option>
-              <option value="5">5 seconds</option>
-              <option value="10" selected>10 seconds</option>
-              <option value="30">30 seconds</option>
-              <option value="60">1 minute</option>
-              <option value="300">5 minutes</option>
-            </select>
-          </div>
-          <div class="col-sm-6">
-            <label for="remoteSyncMode" class="form-label small mb-1">Request mode</label>
-            <select id="remoteSyncMode" class="form-select form-select-sm">
-              <option value="cors" selected>JSON (server must allow CORS)</option>
-              <option value="simple">Simple (no CORS needed, response hidden)</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-text">
-          Settings are locked while sync is on. Local addresses (e.g. <code>http://192.168.x.x</code>, <code>*.local</code>)
-          work from the hosted site in Chrome/Edge after you allow local network access when prompted.
-          Use <em>Simple</em> mode if the server doesn't send CORS headers (Home Assistant, Node-RED, Google Apps Script).
-        </div>
-        <pre id="remoteSyncStatus" class="status-text mb-0 mt-2 text-body-secondary small"></pre>
-      </div>
-    </div>
-
     <footer class="text-center text-body-secondary small pb-2">
       <a href="https://bhaggya55.github.io/jkbms-monitor" target="_blank" rel="noopener noreferrer">bhaggya55.github.io/jkbms-monitor</a>
       &middot;
       <a href="https://github.com/bhaggya55/jkbms-monitor/blob/master/README.md" target="_blank" rel="noopener noreferrer">README</a>
       &middot;
-      <a href="https://github.com/bhaggya55/jkbms-monitor/releases/tag/v1.5.0" target="_blank" rel="noopener noreferrer">v1.5.0</a>
+      <a href="https://github.com/bhaggya55/jkbms-monitor/releases/tag/v1.6.0" target="_blank" rel="noopener noreferrer">v1.6.0</a>
     </footer>
   </div>
 
@@ -744,11 +767,13 @@ function requestDetailLog(onProgress) {
   });
 }
 
+const DETAIL_LOG_CSV_COLUMNS = ['Time', 'Code', 'Event', 'Charge', 'Discharge', 'Balance', 'Max cell', 'Min cell',
+  'Max cell voltage (V)', 'Min cell voltage (V)', 'Battery voltage (V)', 'Battery current (A)',
+  'Remaining capacity (Ah)', 'Full charge capacity (Ah)', 'Max temp (C)', 'Min temp (C)', 'MOS temp (C)'];
+
 function detailLogCsv(records) {
   const onOff = (v) => (v ? 'ON' : 'OFF');
-  const rows = ['Time,Code,Event,Charge,Discharge,Balance,Max cell,Min cell,Max cell voltage (V),'
-    + 'Min cell voltage (V),Battery voltage (V),Battery current (A),Remaining capacity (Ah),'
-    + 'Full charge capacity (Ah),Max temp (C),Min temp (C),MOS temp (C)'];
+  const rows = [DETAIL_LOG_CSV_COLUMNS.join(',')];
   for (const r of records) {
     rows.push([
       formatLocalDateTime(r.time), `0x${r.code.toString(16).toUpperCase().padStart(2, '0')}`,
@@ -761,9 +786,47 @@ function detailLogCsv(records) {
   return rows.join('\r\n') + '\r\n';
 }
 
-// Analysis of a downloaded detailed log, shown as charts in the Log Analysis
-// card. The log only has a record when an event occurs, so every chart is
-// about the events themselves; nothing here shows the pack between events.
+// Reads back a detailed log file written by detailLogCsv. The event name is
+// ignored (the code says which event it is), so it is whatever lies between
+// the two leading and the fourteen trailing columns.
+function parseDetailLogCsv(text) {
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+  const header = lines[0].split(',');
+  if (header[0] === 'Entry' && header[1] === 'Estimated time') {
+    throw new Error('it is a system log, and the analysis needs a detailed log');
+  }
+  if (header.length !== DETAIL_LOG_CSV_COLUMNS.length || DETAIL_LOG_CSV_COLUMNS.some((c, i) => header[i].trim() !== c)) {
+    throw new Error('it is not a detailed log saved by this page');
+  }
+  const records = [];
+  lines.forEach((line, i) => {
+    if (i === 0 || !line.trim()) return;
+    const fields = line.split(',').map((f) => f.trim());
+    const time = /^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d)$/.exec(fields[0]);
+    const tail = fields.slice(-14);
+    const numbers = tail.slice(3).map(Number);
+    const flags = tail.slice(0, 3);
+    if (fields.length < DETAIL_LOG_CSV_COLUMNS.length || !time || !/^0x[0-9a-f]{1,2}$/i.test(fields[1])
+      || numbers.some((n) => !Number.isFinite(n)) || flags.some((f) => f !== 'ON' && f !== 'OFF')) {
+      throw new Error(`line ${i + 1} could not be read`);
+    }
+    const [maxCell, minCell, maxCellVoltage, minCellVoltage, packVoltage, current,
+      remainingCapacity, fullChargeCapacity, maxTemp, minTemp, mosTemp] = numbers;
+    records.push({
+      time: new Date(+time[1], time[2] - 1, +time[3], +time[4], +time[5], +time[6]),
+      code: parseInt(fields[1], 16),
+      charging: flags[0] === 'ON', discharging: flags[1] === 'ON', balancing: flags[2] === 'ON',
+      maxCell, minCell, maxCellVoltage, minCellVoltage, packVoltage, current,
+      remainingCapacity, fullChargeCapacity, maxTemp, minTemp, mosTemp,
+    });
+  });
+  if (!records.length) throw new Error('it has no records');
+  return records;
+}
+
+// Analysis of a detailed log, shown as a summary and charts in the Log
+// Analysis tab. The log only has a record when an event occurs, so everything
+// is about the events themselves; nothing here shows the pack between events.
 const LOG_CHART_HEIGHT = 220;
 const LOG_CHART_ROW_HEIGHT = 22; // per bar in the ranked (horizontal) charts
 const DAY_MS = 86400000;
@@ -772,11 +835,10 @@ const isCellOvp = (r) => r.code >= CELL_OVP_CODE_FIRST && r.code <= CELL_OVP_COD
 const isCellUvp = (r) => r.code >= CELL_UVP_CODE_FIRST && r.code <= CELL_UVP_CODE_LAST;
 const logDay = (date) => formatLocalDateTime(date).slice(0, 10);
 
-// Counts per cell, most first. Cells the BMS currently reports are listed
-// even with a count of zero, so each ranking covers the whole pack.
-function rankCells(cellNumbers) {
-  const counts = new Map();
-  if (lastLiveData) lastLiveData.cells.forEach((v, i) => { if (v > 0.5) counts.set(i + 1, 0); });
+// Counts per cell, most first. Every cell of the pack is listed, even with a
+// count of zero, so each ranking covers the whole pack.
+function rankCells(cellNumbers, packCells) {
+  const counts = new Map(packCells.map((cell) => [cell, 0]));
   for (const cell of cellNumbers) counts.set(cell, (counts.get(cell) || 0) + 1);
   return [...counts]
     .map(([cell, count]) => ({ cell, count }))
@@ -796,8 +858,14 @@ function daysSpanned(dates) {
   return days;
 }
 
-function analyseDetailLog(records) {
+// `liveCells` are the cell numbers the connected BMS reports, when the log is
+// its own. The log doesn't say how many cells the pack has, so without them
+// the pack is taken to run up to the highest cell number the log mentions.
+function analyseDetailLog(records, liveCells) {
   const trips = records.filter(isCellOvp).map((r) => ({ ...r, cell: r.code - CELL_OVP_CODE_FIRST + 1 }));
+  const uvpCells = records.filter(isCellUvp).map((r) => r.code - CELL_UVP_CODE_FIRST + 1);
+  const highestCell = Math.max(...records.map((r) => Math.max(r.maxCell, r.minCell)), ...trips.map((t) => t.cell), ...uvpCells);
+  const packCells = [...new Set([...Array.from({ length: highestCell }, (_, i) => i + 1), ...liveCells])].sort((a, b) => a - b);
   const days = daysSpanned(records.map((r) => r.time));
   const dayIndex = new Map(days.map((d, i) => [d, i]));
 
@@ -829,11 +897,116 @@ function analyseDetailLog(records) {
   end.setHours(24, 0, 0, 0);
 
   return {
-    records, trips, days, tripsPerDay, tripsPerHour, blockedMinutesPerDay,
-    uvpCells: records.filter(isCellUvp).map((r) => r.code - CELL_UVP_CODE_FIRST + 1),
+    records, trips, days, tripsPerDay, tripsPerHour, blockedMinutesPerDay, uvpCells, packCells,
     startMs: start.getTime(),
     endMs: end.getTime(),
   };
+}
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function formatMinutes(minutes) {
+  const total = Math.round(minutes);
+  return total < 60 ? `${total} min` : `${Math.floor(total / 60)} h ${total % 60} min`;
+}
+
+// The headline figures shown above the charts: [{ label, value, unit, sub }]
+function summariseDetailLog(a) {
+  const { records, trips } = a;
+  const none = (label) => ({ label, value: '–', sub: 'no OVP trips in this log' });
+  const tiles = [{
+    label: 'Records',
+    value: records.length.toLocaleString(),
+    sub: a.days.length === 1 ? a.days[0] : `${a.days[0]} to ${a.days[a.days.length - 1]}`,
+  }];
+
+  const tripDays = a.tripsPerDay.filter((n) => n > 0).length;
+  tiles.push({
+    label: 'Cell OVP events',
+    value: trips.length.toLocaleString(),
+    sub: trips.length ? `on ${tripDays} of ${a.days.length} ${a.days.length === 1 ? 'day' : 'days'}` : '',
+  });
+
+  if (trips.length) {
+    const share = (n) => `${n.toLocaleString()} of ${trips.length.toLocaleString()} trips (${Math.round((n / trips.length) * 100)}%)`;
+    const mostTripped = rankCells(trips.map((t) => t.cell), [])[0];
+    tiles.push({ label: 'Most OVP trips', value: `Cell ${mostTripped.cell}`, sub: share(mostTripped.count) });
+    const mostLowest = rankCells(trips.map((t) => t.minCell), [])[0];
+    tiles.push({ label: 'Most often lowest at trips', value: `Cell ${mostLowest.cell}`, sub: share(mostLowest.count) });
+
+    const blocked = a.blockedMinutesPerDay.reduce((sum, m) => sum + m, 0);
+    const worst = a.blockedMinutesPerDay.indexOf(Math.max(...a.blockedMinutesPerDay));
+    tiles.push({
+      label: 'Charging blocked by OVP',
+      value: formatMinutes(blocked),
+      sub: blocked > 0 && a.days.length > 1 ? `most on ${a.days[worst]}: ${formatMinutes(a.blockedMinutesPerDay[worst])}` : '',
+    });
+
+    const spread = (t) => Math.round((t.maxCellVoltage - t.minCellVoltage) * 1000);
+    const daySpread = (day) => Math.round(median(trips.filter((t) => logDay(t.time) === day).map(spread)));
+    const firstDay = logDay(trips[0].time);
+    const lastDay = logDay(trips[trips.length - 1].time);
+    tiles.push({
+      label: 'Median spread at OVP trips',
+      value: Math.round(median(trips.map(spread))),
+      unit: 'mV',
+      sub: firstDay === lastDay ? '' : `${daySpread(firstDay)} mV on the first day, ${daySpread(lastDay)} mV on the last`,
+    });
+
+    const currents = trips.map((t) => t.current);
+    tiles.push({
+      label: 'Median current at OVP trips',
+      value: median(currents).toFixed(1),
+      unit: 'A',
+      sub: `${Math.min(...currents).toFixed(1)} to ${Math.max(...currents).toFixed(1)} A`,
+    });
+  } else {
+    tiles.push(none('Most OVP trips'), none('Most often lowest at trips'), none('Charging blocked by OVP'),
+      none('Median spread at OVP trips'), none('Median current at OVP trips'));
+  }
+
+  const uvpCellList = [...new Set(a.uvpCells)].sort((x, y) => x - y);
+  tiles.push({
+    label: 'Cell UVP events',
+    value: a.uvpCells.length.toLocaleString(),
+    sub: uvpCellList.length ? `${uvpCellList.length === 1 ? 'cell' : 'cells'} ${uvpCellList.join(', ')}` : '',
+  });
+
+  const range = (values) => {
+    const low = Math.min(...values);
+    const high = Math.max(...values);
+    return low === high ? `${low}` : `${low} to ${high}`;
+  };
+  tiles.push({
+    label: 'Battery temperature at events',
+    value: range(records.flatMap((r) => [r.minTemp, r.maxTemp])),
+    unit: '°C',
+    sub: '',
+  });
+  tiles.push({
+    label: 'MOSFET temperature at events',
+    value: range(records.map((r) => r.mosTemp)),
+    unit: '°C',
+    sub: '',
+  });
+  return tiles;
+}
+
+// How many records each kind of event has, most first. The per-cell OVP and
+// UVP codes are counted together, as the charts break them down by cell.
+function countEventTypes(records) {
+  const counts = new Map();
+  for (const r of records) {
+    const name = isCellOvp(r) ? 'Cell over charge protection'
+      : isCellUvp(r) ? 'Cell over discharge protection'
+        : systemLogEventName(r.code);
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1]);
 }
 
 // Draws each bar's value just past its end (horizontal bar charts)
@@ -854,9 +1027,9 @@ const barEndCountPlugin = {
 };
 
 // Horizontal bars, one per cell, most first, each labelled with its count
-function rankedCellChart(cellNumbers, unit) {
+function rankedCellChart(cellNumbers, unit, packCells) {
   if (!cellNumbers.length) return null;
-  const ranking = rankCells(cellNumbers);
+  const ranking = rankCells(cellNumbers, packCells);
   return {
     height: ranking.length * LOG_CHART_ROW_HEIGHT + 8,
     config: {
@@ -956,12 +1129,12 @@ const LOG_CHARTS = [
   {
     title: 'Cell OVP events',
     note: 'Over-voltage protection trips per cell.',
-    build: (a) => rankedCellChart(a.trips.map((t) => t.cell), 'OVP events'),
+    build: (a) => rankedCellChart(a.trips.map((t) => t.cell), 'OVP events', a.packCells),
   },
   {
     title: 'Lowest cell at OVP trips',
     note: 'Which cell had the lowest voltage each time another cell tripped: the cells holding the pack back.',
-    build: (a) => rankedCellChart(a.trips.map((t) => t.minCell), 'times lowest'),
+    build: (a) => rankedCellChart(a.trips.map((t) => t.minCell), 'times lowest', a.packCells),
   },
   {
     title: 'OVP events per day',
@@ -1004,7 +1177,7 @@ const LOG_CHARTS = [
     title: 'Charge current at OVP trips',
     note: 'Pack current at the moment each cell tripped. A cell that only trips at high current points to resistance rather than charge level.',
     build: (a) => {
-      const lastCell = Math.max(...rankCells(a.trips.map((t) => t.cell)).map((c) => c.cell));
+      const lastCell = a.packCells[a.packCells.length - 1];
       return scatterChart(
         a.trips.map((t) => ({ x: t.cell, y: t.current, time: t.time })),
         {
@@ -1060,34 +1233,49 @@ const LOG_CHARTS = [
   {
     title: 'Cell UVP events',
     note: 'Under-voltage protection trips per cell. A cell high on both this and the OVP chart may be low on capacity.',
-    build: (a) => rankedCellChart(a.uvpCells, 'UVP events'),
+    build: (a) => rankedCellChart(a.uvpCells, 'UVP events', a.packCells),
   },
 ];
 
-let logCharts = []; // the Chart.js instances currently shown in the Log Analysis card
+let logCharts = []; // the Chart.js instances currently shown in the Log Analysis tab
 
-function showDetailLogAnalysis(show) {
-  document.getElementById('detailLogAnalysis').style.display = show ? '' : 'none';
-  document.getElementById('detailLogAnalysisHint').style.display = show ? 'none' : '';
-}
+// `source` says where the records came from, e.g. "Opened from file.csv"
+function renderDetailLogAnalysis(records, source, liveCells = []) {
+  if (!records.length) return; // keep whatever analysis is already shown
+  document.getElementById('detailLogAnalysis').style.display = '';
+  document.getElementById('detailLogAnalysisHint').style.display = 'none';
+  const analysis = analyseDetailLog(records, liveCells);
+  document.getElementById('detailLogAnalysisRange').textContent = source;
 
-function renderDetailLogAnalysis(records) {
-  showDetailLogAnalysis(records.length > 0);
-  if (!records.length) return;
-  const analysis = analyseDetailLog(records);
-  document.getElementById('detailLogAnalysisRange').textContent =
-    `${records.length.toLocaleString()} records, ${analysis.days[0]} to ${analysis.days[analysis.days.length - 1]}`;
-
-  logCharts.forEach((c) => c.destroy());
-  logCharts = [];
-  const container = document.getElementById('detailLogCharts');
-  container.replaceChildren();
   const el = (tag, className, text) => {
     const e = document.createElement(tag);
     e.className = className;
     if (text) e.textContent = text;
     return e;
   };
+
+  document.getElementById('detailLogSummary').replaceChildren(...summariseDetailLog(analysis).map((t) => {
+    const tile = el('div', 'stat-tile');
+    const value = el('div', 'stat-value');
+    value.append(el('span', '', t.value));
+    if (t.unit) value.append(el('span', 'stat-unit', t.unit));
+    tile.append(el('div', 'stat-label', t.label), value);
+    if (t.sub) tile.append(el('div', 'stat-sub', t.sub));
+    const col = el('div', 'col');
+    col.append(tile);
+    return col;
+  }));
+
+  document.getElementById('detailLogEvents').replaceChildren(...countEventTypes(records).map(([name, count]) => {
+    const pill = el('span', 'badge text-bg-light border fw-normal', `${name} `);
+    pill.append(el('span', 'fw-semibold', count.toLocaleString()));
+    return pill;
+  }));
+
+  logCharts.forEach((c) => c.destroy());
+  logCharts = [];
+  const container = document.getElementById('detailLogCharts');
+  container.replaceChildren();
   for (const def of LOG_CHARTS) {
     const col = el('div', 'col-lg-6');
     col.append(el('div', 'fw-semibold', def.title));
@@ -1128,9 +1316,20 @@ function downloadLogCsv(kind, csv) {
   downloadTextFile(`jkbms-${kind}-${serial}-${formatLocalDateTime(new Date(), '', '-', '')}.csv`, csv, 'text/csv');
 }
 
+const openDetailLogButton = document.getElementById('openDetailLog');
+const detailLogFileInput = document.getElementById('detailLogFile');
+let bmsConnected = false; // the download buttons only work while connected
+let logDownloadRunning = false;
+
+function updateLogButtons() {
+  logDownloadButtons.forEach((b) => { b.disabled = logDownloadRunning || !bmsConnected; });
+  openDetailLogButton.disabled = logDownloadRunning;
+}
+
 // Runs one log download at a time; `task` resolves to the message to show.
 async function runLogDownload(task) {
-  logDownloadButtons.forEach((b) => { b.disabled = true; });
+  logDownloadRunning = true;
+  updateLogButtons();
   logDownloadStatus.textContent = 'Requesting…';
   try {
     logDownloadStatus.textContent = await task();
@@ -1138,7 +1337,8 @@ async function runLogDownload(task) {
     console.error(err);
     logDownloadStatus.textContent = `Failed: ${err.message}`;
   } finally {
-    logDownloadButtons.forEach((b) => { b.disabled = false; });
+    logDownloadRunning = false;
+    updateLogButtons();
   }
 }
 
@@ -1151,10 +1351,29 @@ document.getElementById('downloadSystemLog').addEventListener('click', () => run
 document.getElementById('downloadDetailLog').addEventListener('click', () => runLogDownload(async () => {
   const log = await requestDetailLog((n) => { logDownloadStatus.textContent = `Receiving… ${n} records`; });
   downloadLogCsv('detail-log', detailLogCsv(log.records));
-  renderDetailLogAnalysis(log.records);
+  const liveCells = [];
+  if (lastLiveData) lastLiveData.cells.forEach((v, i) => { if (v > 0.5) liveCells.push(i + 1); });
+  const serial = lastDeviceInfo && lastDeviceInfo.serialNumber;
+  renderDetailLogAnalysis(log.records,
+    `Downloaded from ${serial ? `BMS ${serial}` : 'the BMS'} at ${formatLocalDateTime(new Date())}`, liveCells);
   return `Downloaded ${log.records.length} records.`
     + (log.complete ? '' : ' The BMS stopped sending without marking the end, so the log may be incomplete.');
 }));
+
+// A detailed log saved earlier can be analysed again without the BMS
+openDetailLogButton.addEventListener('click', () => detailLogFileInput.click());
+detailLogFileInput.addEventListener('change', async () => {
+  const file = detailLogFileInput.files[0];
+  detailLogFileInput.value = ''; // so that choosing the same file again is noticed
+  if (!file) return;
+  try {
+    renderDetailLogAnalysis(parseDetailLogCsv(await file.text()), `Opened from ${file.name}`);
+    logDownloadStatus.textContent = `Opened ${file.name}.`;
+  } catch (err) {
+    console.error(err);
+    logDownloadStatus.textContent = `Could not open ${file.name}: ${err.message}.`;
+  }
+});
 
 const BATTERY_TYPE_NAMES = ['LFP', 'Li-ion', 'LTO'];
 
@@ -2143,8 +2362,11 @@ function setConnectedUi(connected) {
   document.getElementById('cellVoltagesCard').style.display = display;
   document.getElementById('bmsStatusCard').style.display = display;
   document.getElementById('packSummaryCard').style.display = display;
-  document.getElementById('logAnalysisCard').style.display = display;
   document.getElementById('remoteSyncCard').style.display = display;
+  document.getElementById('monitorHint').style.display = connected ? 'none' : '';
+  document.getElementById('logDownloadHint').style.display = connected ? 'none' : '';
+  bmsConnected = connected;
+  updateLogButtons();
 }
 
 // 0x97 returns a DEVICE_INFO frame; 0x96 returns a SETTINGS frame followed
@@ -2240,7 +2462,6 @@ function resetDeviceState() {
   lastUse32S = null;
   document.getElementById('deviceInfoCard').style.display = 'none';
   document.getElementById('settingsCard').style.display = 'none';
-  showDetailLogAnalysis(false);
   logDownloadStatus.textContent = '';
 }
 

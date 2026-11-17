@@ -76,7 +76,8 @@ see [Comparison with other tools](#comparison-with-other-tools).
   per-cell wire-resistance compensation, and (on JK02_32S packs) extended
   fields like device address, precharge time, heating settings, and the
   full set of configured switches.
-- **Log Analysis** — two buttons save the BMS's stored logs as CSV files:
+- **Log Analysis** (its own tab) — two buttons save the BMS's stored logs as
+  CSV files:
   - **Download system log** — the most recent events (boots, protection
     trips and releases, switch changes, …; the last 50 on the BMS this was
     tested with), newest first. The BMS only records each event's run
@@ -89,8 +90,15 @@ see [Comparison with other tools](#comparison-with-other-tools).
     whenever the official JK app connects, and are shown in your
     browser's time zone. Heater status and current are not included.
 
-  Downloading the detailed log also shows an analysis of it in the card,
-  as charts:
+  Downloading the detailed log also shows an analysis of it in the tab.
+  **Open a saved detailed log** shows the same analysis for a detailed log
+  CSV saved by this page earlier, with no BMS connection needed (it also
+  works in browsers without Web Bluetooth). The analysis starts with a
+  summary — record count and period, OVP event count, the cell that trips
+  most and the cell most often lowest at trips, total time charging was
+  blocked, median cell spread and current at trips, UVP events,
+  temperature ranges, and how many records each event type has — followed
+  by charts:
   - over-voltage protection (OVP) events per cell, and which cell was
     lowest each time another cell tripped;
   - OVP events per day and by hour of day, and how long charging was
@@ -101,8 +109,8 @@ see [Comparison with other tools](#comparison-with-other-tools).
   - temperatures at the logged events;
   - under-voltage protection (UVP) events per cell.
 
-  The log only has a record when an event occurs, so these charts
-  describe the events, not what the pack did in between.
+  The log only has a record when an event occurs, so the summary and
+  charts describe the events, not what the pack did in between.
 - **Remote Sync** — optionally POST a combined JSON snapshot of Device
   Info, Settings, and Live Data to a URL of your choice, at a configurable
   interval — including to local-network addresses.
@@ -116,10 +124,12 @@ see [Comparison with other tools](#comparison-with-other-tools).
 
 Open [index.html](index.html) in a Chromium-based browser
 (Chrome or Edge) that supports the Web Bluetooth API, then click **Connect
-to JK-BMS** and select your BMS from the device picker. The Pack Status,
-Cell Voltages and Wire Resistances, BMS Status, Pack Summary, Log Analysis,
-and Remote Sync cards appear once connected and hide again on disconnect; Device Info and Settings appear as soon as
-the BMS reports them.
+to JK-BMS** and select your BMS from the device picker. On the **Monitor**
+tab, the Pack Status, Cell Voltages and Wire Resistances, BMS Status, Pack
+Summary, and Remote Sync cards appear once connected and hide again on
+disconnect; Device Info and Settings appear as soon as the BMS reports
+them. The **Log Analysis** tab is always available: its download buttons
+need a connection, but a saved detailed log can be opened at any time.
 
 All dependencies (Bootstrap, Chart.js) are vendored locally under `vendor/`
 so the page works fully offline — no CDN or internet connection required.
