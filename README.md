@@ -68,8 +68,15 @@ see [Comparison with other tools](#comparison-with-other-tools).
   power-on count, battery type, log entry count, UART/CAN protocols, and
   the browser-assigned Bluetooth identifier (`device.id`/`device.name` —
   Web Bluetooth deliberately hides the real BLE MAC address from web pages,
-  so this is the closest available identifier). Two buttons save the
-  BMS's stored logs as CSV files:
+  so this is the closest available identifier).
+- **Settings** — nearly every field from the BMS's SETTINGS frame:
+  voltage protection thresholds (UVP/OVP with recovery), balance settings,
+  charge/discharge current limits with OCP delay/recovery, over/under
+  temperature protection with recovery, short-circuit protection timing,
+  per-cell wire-resistance compensation, and (on JK02_32S packs) extended
+  fields like device address, precharge time, heating settings, and the
+  full set of configured switches.
+- **Log Analysis** — two buttons save the BMS's stored logs as CSV files:
   - **Download system log** — the most recent events (boots, protection
     trips and releases, switch changes, …; the last 50 on the BMS this was
     tested with), newest first. The BMS only records each event's run
@@ -81,13 +88,21 @@ see [Comparison with other tools](#comparison-with-other-tools).
     about 15 seconds. Times come from the BMS's own clock, which is set
     whenever the official JK app connects, and are shown in your
     browser's time zone. Heater status and current are not included.
-- **Settings** — nearly every field from the BMS's SETTINGS frame:
-  voltage protection thresholds (UVP/OVP with recovery), balance settings,
-  charge/discharge current limits with OCP delay/recovery, over/under
-  temperature protection with recovery, short-circuit protection timing,
-  per-cell wire-resistance compensation, and (on JK02_32S packs) extended
-  fields like device address, precharge time, heating settings, and the
-  full set of configured switches.
+
+  Downloading the detailed log also shows an analysis of it in the card,
+  as charts:
+  - over-voltage protection (OVP) events per cell, and which cell was
+    lowest each time another cell tripped;
+  - OVP events per day and by hour of day, and how long charging was
+    blocked by OVP each day;
+  - the spread between the highest and lowest cell at each OVP trip, over
+    time;
+  - the charge current at each OVP trip, per cell;
+  - temperatures at the logged events;
+  - under-voltage protection (UVP) events per cell.
+
+  The log only has a record when an event occurs, so these charts
+  describe the events, not what the pack did in between.
 - **Remote Sync** — optionally POST a combined JSON snapshot of Device
   Info, Settings, and Live Data to a URL of your choice, at a configurable
   interval — including to local-network addresses.
@@ -102,9 +117,8 @@ see [Comparison with other tools](#comparison-with-other-tools).
 Open [index.html](index.html) in a Chromium-based browser
 (Chrome or Edge) that supports the Web Bluetooth API, then click **Connect
 to JK-BMS** and select your BMS from the device picker. The Pack Status,
-Cell Voltages and Wire Resistances, Pack Summary, and Remote Sync cards
-appear once connected
-and hide again on disconnect; Device Info and Settings appear as soon as
+Cell Voltages and Wire Resistances, BMS Status, Pack Summary, Log Analysis,
+and Remote Sync cards appear once connected and hide again on disconnect; Device Info and Settings appear as soon as
 the BMS reports them.
 
 All dependencies (Bootstrap, Chart.js) are vendored locally under `vendor/`
