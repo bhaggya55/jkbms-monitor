@@ -266,7 +266,7 @@
       &middot;
       <a href="https://github.com/bhaggya55/jkbms-monitor/blob/master/README.md" target="_blank" rel="noopener noreferrer">README</a>
       &middot;
-      <a href="https://github.com/bhaggya55/jkbms-monitor/releases/tag/v1.6.0" target="_blank" rel="noopener noreferrer">v1.6.0</a>
+      <a href="https://github.com/bhaggya55/jkbms-monitor/releases/tag/v1.7.0" target="_blank" rel="noopener noreferrer">v1.7.0</a>
     </footer>
   </div>
 
@@ -1731,11 +1731,90 @@ function parseLiveData(frame) {
 const CELL_BAR_COLOR = '#0d6efd';
 const CELL_BAR_COLOR_MIN = '#dc3545';
 const CELL_BAR_COLOR_MAX = '#fd7e14';
-const CELL_VOLTAGE_AXIS_MIN = 3.115;
-const CELL_VOLTAGE_AXIS_MAX = 3.65;
+const CELL_VOLTAGE_AXIS_MIN = 3.115; // default bottom; drops if any cell is lower
+const CELL_VOLTAGE_AXIS_MAX = 3.65; // default top; grows if any cell is higher
+const CELL_VOLTAGE_AXIS_STEP = 0.1; // V: the top/bottom move in steps of this
 const CELL_RESISTANCE_COLOR = '#6f42c1';
 const CELL_RESISTANCE_AXIS_MIN = 0; // mΩ
-const CELL_RESISTANCE_AXIS_MAX = 200; // mΩ
+const CELL_RESISTANCE_AXIS_MAX = 200; // mΩ: default top; grows if any cell is higher
+const CELL_RESISTANCE_AXIS_STEP = 50; // mΩ: the top grows in steps of this
+// Safe cell voltage range, indexed by d.batteryType (same order as
+// BATTERY_TYPE_NAMES: LFP, Li-ion, LTO). Typical datasheet charge / discharge
+// limits for each chemistry, not the BMS's configured OVP/UVP settings.
+const BATTERY_TYPE_CELL_LIMITS_V = [
+  { min: 2.5, max: 3.65 }, // LFP
+  { min: 2.5, max: 4.2 }, // Li-ion
+  { min: 1.5, max: 2.8 }, // LTO
+];
+const CELL_UNSAFE_FILL = 'rgba(220, 53, 69, 0.15)'; // translucent CELL_BAR_COLOR_MIN red
+const CELL_UNSAFE_LINE = 'rgba(220, 53, 69, 0.8)';
+
+// The safe cell voltage range to shade outside of: the chemistry's typical
+// limits when the BMS reports its battery type (JK02_32S only), otherwise the
+// BMS's configured cell OVP/UVP from the last SETTINGS frame. Either limit can
+// be null (nothing to draw for it); null overall until settings arrive.
+function cellVoltageLimits(d) {
+  const byType = BATTERY_TYPE_CELL_LIMITS_V[d.batteryType];
+  if (byType) return byType;
+  if (!lastSettingsData) return null;
+  const valid = (v) => (Number.isFinite(v) && v > 0 ? v : null); // 0 = not set
+  const min = valid(lastSettingsData.cellUVP);
+  const max = valid(lastSettingsData.cellOVP);
+  return min === null && max === null ? null : { min, max };
+}
+
+// Shades the cell chart red above chart.$cellLimits.max and below
+// chart.$cellLimits.min (set per update; null = off). Each band is only
+// drawn while its limit is inside the voltage axis's current range.
+const unsafeVoltageRegionPlugin = {
+  id: 'unsafeVoltageRegion',
+  beforeDatasetsDraw(c) {
+    const limits = c.$cellLimits;
+    const yScale = c.scales.y;
+    if (!limits || !yScale) return;
+    const { ctx, chartArea } = c;
+    const inRange = (v) => v != null && v > yScale.min && v < yScale.max;
+
+    // Fill between the limit line and the chart edge (top or bottom), then
+    // draw the dashed limit line itself.
+    const band = (limit, edgeY) => {
+      const y = yScale.getPixelForValue(limit);
+      ctx.fillRect(chartArea.left, Math.min(y, edgeY), chartArea.right - chartArea.left, Math.abs(edgeY - y));
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+    };
+
+    ctx.save();
+    ctx.fillStyle = CELL_UNSAFE_FILL;
+    ctx.strokeStyle = CELL_UNSAFE_LINE;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    if (inRange(limits.max)) band(limits.max, chartArea.top);
+    if (inRange(limits.min)) band(limits.min, chartArea.bottom);
+    ctx.restore();
+  }
+};
+
+// Axis top for the cell chart: the default while every value fits under it,
+// otherwise the value rounded up to the next step, so the chart scales up
+// for higher readings and drops back to the default once they come down.
+function scaledAxisMax(values, defaultMax, step) {
+  const highest = Math.max(...values.filter((v) => v !== null && Number.isFinite(v)));
+  if (!(highest > defaultMax)) return defaultMax;
+  // Round to dodge float noise (e.g. 3.7 / 0.1 = 37.00000000000001) before ceil
+  return Number((Math.ceil(Number((highest / step).toFixed(6))) * step).toFixed(6));
+}
+
+// Axis bottom counterpart of scaledAxisMax: the default while every value is
+// above it, otherwise the value rounded down to the previous step (e.g. so
+// LTO cells at ~2.5 V aren't hidden below the default 3.115 V floor).
+function scaledAxisMin(values, defaultMin, step) {
+  const lowest = Math.min(...values.filter((v) => v !== null && Number.isFinite(v)));
+  if (!(lowest < defaultMin)) return defaultMin;
+  return Number((Math.floor(Number((lowest / step).toFixed(6))) * step).toFixed(6));
+}
 const CELL_RESISTANCE_NA = 65.535; // raw 0xFFFF: the BMS has no reading for this cell
 let cellChart;
 
@@ -1917,7 +1996,8 @@ function getCellChart() {
           }
         }
       }
-    }
+    },
+    plugins: [unsafeVoltageRegionPlugin]
   });
   return cellChart;
 }
@@ -1936,6 +2016,11 @@ function updateCellChart(activeIndices, d) {
     const r = d.resistances[i];
     return r >= CELL_RESISTANCE_NA ? null : r * 1000;
   });
+  chart.options.scales.y.min = scaledAxisMin(voltages, CELL_VOLTAGE_AXIS_MIN, CELL_VOLTAGE_AXIS_STEP);
+  chart.options.scales.y.max = scaledAxisMax(voltages, CELL_VOLTAGE_AXIS_MAX, CELL_VOLTAGE_AXIS_STEP);
+  chart.$cellLimits = cellVoltageLimits(d);
+  chart.options.scales.yResistance.max = scaledAxisMax(
+    chart.data.datasets[1].data, CELL_RESISTANCE_AXIS_MAX, CELL_RESISTANCE_AXIS_STEP);
   dataset.backgroundColor = voltages.map((v) => {
     if (v === maxV && maxV !== minV) return CELL_BAR_COLOR_MAX;
     if (v === minV && maxV !== minV) return CELL_BAR_COLOR_MIN;

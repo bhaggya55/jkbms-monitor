@@ -53,7 +53,14 @@ see [Comparison with other tools](#comparison-with-other-tools).
 - **Pack Status** — power, SOC, and cell-voltage-delta gauges.
 - **Cell Voltages and Wire Resistances** — a live bar chart of every active cell, with the
   min/max cells highlighted, plus each cell's resistance as a line on a
-  right-hand 0–200 mΩ axis.
+  right-hand 0–200 mΩ axis. The voltage axis spans 3.115–3.65 V by default;
+  both axes scale (in 0.1 V / 50 mΩ steps) when a reading falls outside
+  them, and return to the defaults once readings are back in range. When the
+  BMS reports the battery type (JK02_32S only), the parts of the voltage axis
+  outside that chemistry's safe cell voltage range are shaded red: above
+  3.65 V / below 2.5 V for LFP, above 4.2 V / below 2.5 V for Li-ion, and
+  above 2.8 V / below 1.5 V for LTO. When no battery type is reported, the
+  shading uses the BMS's configured cell OVP and UVP instead.
 - **BMS Status** — the actual charge/discharge MOSFET states (as opposed to
   the configured switches), precharge, balancing, charge stage, heating,
   charger, PCL module, dry contacts, emergency mode, smart sleep countdown,
